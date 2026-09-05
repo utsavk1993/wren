@@ -33,6 +33,11 @@ TOKEN_LIFETIME_SECONDS = 1800
 # A lookup that has not answered by now will not arrive in time to be useful.
 REQUEST_TIMEOUT_SECONDS = 5.0
 
+# Acquiring a token is slower than any query, especially the first one on a
+# cold connection, and it happens away from the conversation. It gets its own
+# allowance so a caller's first turn is never the thing that pays for it.
+TOKEN_TIMEOUT_SECONDS = 20.0
+
 CUSTOMER_FIELDS = (
     "Id, FirstName, LastName, Name, Phone, Email, "
     "Account.Id, Account.Wren_External_Id__c, Account.Plan__c, "
@@ -77,6 +82,18 @@ class SalesforceClient:
         self._token_acquired_at = 0.0
         self._token_lock = asyncio.Lock()
 
+    async def warm(self) -> None:
+        """Acquire the token before anyone calls.
+
+        Without this the first caller of the day waits through a cold
+        connection and a token request on top of their first lookup, which is
+        several seconds and reads as the call having failed.
+        """
+        try:
+            await self._access_token()
+        except Exception as exc:  # noqa: BLE001 - a cold token is not fatal
+            log.warning("could not acquire a token ahead of time: %s", exc)
+
     async def aclose(self) -> None:
         if self._owns_http:
             await self._http.aclose()
@@ -98,6 +115,7 @@ class SalesforceClient:
                     "client_id": self._client_id,
                     "client_secret": self._client_secret,
                 },
+                timeout=TOKEN_TIMEOUT_SECONDS,
             )
             if response.status_code != 200:
                 raise SalesforceError(

@@ -12,7 +12,6 @@ import base64
 import json
 import logging
 import os
-import uuid
 from typing import Any
 
 from conversation import Conversation
@@ -41,10 +40,25 @@ def capabilities() -> dict[str, Any]:
     }
 
 
+async def warm_up() -> None:
+    """Do the slow first-time work before anyone is waiting on it."""
+    salesforce = SalesforceClient()
+    retriever = Retriever()
+    try:
+        await salesforce.warm()
+        # Loads the embedding model, which otherwise happens inside the first
+        # lookup of the first call.
+        await retriever.search("warm up")
+    except Exception:  # noqa: BLE001 - starting up must not fail on this
+        log.warning("could not warm up fully", exc_info=True)
+    finally:
+        await salesforce.aclose()
+        await retriever.aclose()
+
+
 class CallHandler:
     def __init__(self, websocket: Any) -> None:
         self.websocket = websocket
-        self.call_id = f"CALL-{uuid.uuid4().hex[:12]}"
         profile = audio_profile()
         self.salesforce = SalesforceClient()
         self.telemetry = TelemetryClient()
@@ -57,8 +71,13 @@ class CallHandler:
         self.pipeline = VoicePipeline(
             CallSession(conversation=conversation, speaker=self.speaker)
         )
+        # One identifier for the call, the same one the record and the logs use.
+        # Two would mean a log line and a stored call could not be matched up.
+        self.call_id = conversation.record.id
 
     async def aclose(self) -> None:
+        # However the call ended, including badly, the record is closed off.
+        self.pipeline.session.conversation.ended()
         await self.salesforce.aclose()
         await self.telemetry.aclose()
         await self.retriever.aclose()
