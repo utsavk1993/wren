@@ -27,7 +27,7 @@ from policy import (
 from systems.models import AccountStatus, CaseHistory, Customer, Device, SupportCase
 
 
-def make_customer(status=AccountStatus.ACTIVE) -> Customer:
+def make_customer(status="Active") -> Customer:
     return Customer(
         external_id="CUST-1001", account_id="001", contact_id="003",
         full_name="Priya Raghunathan", first_name="Priya", phone="+1-415-555-0142",
@@ -82,7 +82,7 @@ def test_a_verified_caller_may_be_told_about_their_account():
 
 # ---- unmonitored equipment is not repaired ----
 
-@pytest.mark.parametrize("status", [AccountStatus.SUSPENDED, AccountStatus.CANCELLED])
+@pytest.mark.parametrize("status", ["Suspended", "Cancelled"])
 def test_unmonitored_accounts_are_not_troubleshot(status):
     state = CallState(customer=make_customer(status), verified=True)
     ruling = may_troubleshoot(state)
@@ -90,13 +90,13 @@ def test_unmonitored_accounts_are_not_troubleshot(status):
     assert "not being monitored" in ruling.guidance
 
 
-@pytest.mark.parametrize("status", [AccountStatus.ACTIVE, AccountStatus.PAST_DUE])
+@pytest.mark.parametrize("status", ["Active", "Past Due"])
 def test_monitored_accounts_are_troubleshot(status):
     assert may_troubleshoot(CallState(customer=make_customer(status), verified=True))
 
 
 def test_an_overdue_account_is_never_told_about_money():
-    state = CallState(customer=make_customer(AccountStatus.PAST_DUE), verified=True)
+    state = CallState(customer=make_customer("Past Due"), verified=True)
     ruling = may_troubleshoot(state)
     assert ruling, "an overdue account is still monitored and should be helped"
 
@@ -146,7 +146,7 @@ def test_steps_are_allowed_when_something_was_retrieved():
 
 
 def test_grounding_does_not_override_an_unmonitored_account():
-    state = CallState(customer=make_customer(AccountStatus.SUSPENDED), verified=True)
+    state = CallState(customer=make_customer("Suspended"), verified=True)
     ruling = may_give_these_steps(state, ["1. Take the cover off."])
     assert ruling.reason is Denial.NOT_MONITORED
 

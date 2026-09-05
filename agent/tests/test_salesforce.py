@@ -12,6 +12,8 @@ import os
 
 import pytest
 
+from typing import get_args
+
 from systems.models import AccountStatus
 from systems.salesforce import SalesforceClient, normalise_phone
 
@@ -63,7 +65,8 @@ async def test_customer_carries_what_the_conversation_needs(client):
     customer = await client.find_customer_by_phone(KNOWN_PHONE)
     assert customer.full_name
     assert customer.plan
-    assert isinstance(customer.status, AccountStatus)
+    # A Literal, not a class, so membership rather than isinstance.
+    assert customer.status in get_args(AccountStatus)
     assert customer.address.count(",") >= 1
 
 

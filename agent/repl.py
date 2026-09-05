@@ -36,7 +36,7 @@ def _show_state(state: policy.CallState) -> None:
     print(f"{DIM}  caller:   {customer.full_name if customer else '(unidentified)'}")
     print(f"  verified: {state.verified}  attempts: {state.verification_attempts}")
     if customer:
-        print(f"  account:  {customer.external_id}  {customer.plan}  {customer.status.value}")
+        print(f"  account:  {customer.external_id}  {customer.plan}  {customer.status}")
     if state.device_under_discussion:
         d = state.device_under_discussion
         print(f"  device:   {d.name} ({d.external_id}) {d.status}")

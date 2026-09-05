@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 
-from systems.models import CaseHistory, Customer, Device, is_faulty
+from systems.models import CaseHistory, Customer, Device, is_faulty, is_monitored
 
 # Two tries is enough to survive a mis-hearing and few enough to be no use to
 # someone working through possibilities.
@@ -176,10 +176,10 @@ def may_troubleshoot(state: CallState) -> Ruling:
         return disclosure
 
     assert state.customer is not None
-    if not state.customer.status.is_monitored:
+    if not is_monitored(state.customer.status):
         return _denied(
             Denial.NOT_MONITORED,
-            f"This account is {state.customer.status.value.lower()} and the equipment "
+            f"This account is {(state.customer.status or 'unknown').lower()} and the equipment "
             "is not being monitored. Say so plainly, do not repair anything, and offer "
             "the team who can restart the service.",
         )
@@ -290,7 +290,7 @@ def should_escalate(state: CallState) -> Ruling:
         return _denied(Denial.CALLER_ASKED_FOR_A_PERSON, "The caller asked for a person.")
     if state.verification_exhausted:
         return _denied(Denial.VERIFICATION_FAILED, "Verification failed. Offer a callback.")
-    if state.customer and not state.customer.status.is_monitored:
+    if state.customer and not is_monitored(state.customer.status):
         return _denied(Denial.NOT_MONITORED, "The account is not monitored.")
     if len(state.steps_given) >= MAX_STEPS_BEFORE_HANDOFF:
         return _denied(Denial.STEPS_EXHAUSTED, "Everything reasonable has been tried.")

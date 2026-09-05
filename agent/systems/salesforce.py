@@ -246,15 +246,10 @@ def _parse_date(value: str | None) -> date | None:
 
 def _to_customer(record: dict) -> Customer:
     account = record.get("Account") or {}
-    raw_status = account.get("Account_Status__c") or AccountStatus.ACTIVE.value
-    try:
-        status = AccountStatus(raw_status)
-    except ValueError:
-        # An unrecognised status is treated as unmonitored rather than assumed
-        # active, so a value this code has not seen before cannot silently
-        # authorise troubleshooting on an account that is not being watched.
-        log.warning("unrecognised account status %r, treating as suspended", raw_status)
-        status = AccountStatus.SUSPENDED
+    # No coercion. The status field is a restricted list, so the customer system
+    # will not store a value outside it; whatever arrives is either one of them
+    # or absent, and what an absent one means is decided in models.
+    status: AccountStatus | None = account.get("Account_Status__c")
     return Customer(
         external_id=account.get("Wren_External_Id__c") or "",
         account_id=account.get("Id") or "",

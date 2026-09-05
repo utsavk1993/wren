@@ -1,9 +1,11 @@
 """Shapes returned by the system clients.
 
-The device shapes are generated from the telemetry platform's own description of
-its tables and re-exported here, so the values a status may take come from the
-database rather than from someone keeping two lists in step. The customer system
-publishes no types, so those are written out below.
+Both systems' shapes are generated from what those systems publish about
+themselves, so the values a status may take come from the system that enforces
+them rather than from someone keeping two lists in step.
+
+What is written here is only what neither system knows: how a household reads
+when the two are joined, and what their values mean to this project.
 
 The orchestrator works with these rather than raw API payloads, so a change in
 how a connected system names its fields does not reach the conversation logic.
@@ -16,9 +18,15 @@ from datetime import date, datetime
 from enum import Enum
 
 from .generated import Device, DeviceKind, DeviceStatus
+from .generated_crm import AccountRow, AccountStatus, CaseRow, ContactRow
 
 __all__ = [
+    "MONITORED_STATUSES",
+    "is_monitored",
+    "AccountRow",
     "AccountStatus",
+    "CaseRow",
+    "ContactRow",
     "CaseHistory",
     "Customer",
     "Device",
@@ -28,22 +36,22 @@ __all__ = [
     "is_faulty",
 ]
 
-class AccountStatus(str, Enum):
-    ACTIVE = "Active"
-    PAST_DUE = "Past Due"
-    SUSPENDED = "Suspended"
-    CANCELLED = "Cancelled"
+MONITORED_STATUSES: frozenset[str] = frozenset({"Active", "Past Due"})
 
-    @property
-    def is_monitored(self) -> bool:
-        """Whether the alarm signals from this household are being watched.
 
-        A suspended or closed account has no monitoring behind it. Repairing
-        equipment for one of these callers would leave them believing they are
-        protected when nobody is listening, so this decides whether
-        troubleshooting should happen at all.
-        """
-        return self in (AccountStatus.ACTIVE, AccountStatus.PAST_DUE)
+def is_monitored(status: AccountStatus | None) -> bool:
+    """Whether the alarm signals from this household are being watched.
+
+    An overdue account is still monitored; a suspended or closed one is not, and
+    repairing equipment for one of those leaves the caller believing they are
+    protected when nobody is listening.
+
+    A household with no status recorded is treated as unwatched. That is a
+    judgement about what an absent value means here rather than a guess about
+    the value itself, which the customer system will not let be wrong: the field
+    is a restricted list and refuses anything outside it.
+    """
+    return status in MONITORED_STATUSES
 
 
 ONLINE: DeviceStatus = "online"
@@ -68,7 +76,7 @@ class Customer:
     phone: str
     email: str
     plan: str
-    status: AccountStatus
+    status: AccountStatus | None
     status_since: date | None
     street: str
     city: str

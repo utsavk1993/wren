@@ -18,7 +18,7 @@ from llm import Reply, ScriptedModel, ToolCall
 from systems.models import AccountStatus, CaseHistory, Customer, Device, SupportCase
 
 
-def a_customer(status=AccountStatus.ACTIVE) -> Customer:
+def a_customer(status="Active") -> Customer:
     return Customer(
         external_id="CUST-1001", account_id="001", contact_id="003",
         full_name="Priya Raghunathan", first_name="Priya", phone="+1-415-555-0142",
@@ -175,7 +175,7 @@ async def test_equipment_is_not_listed_before_verification():
 
 # ---- account status ----
 
-@pytest.mark.parametrize("status", [AccountStatus.SUSPENDED, AccountStatus.CANCELLED])
+@pytest.mark.parametrize("status", ["Suspended", "Cancelled"])
 async def test_an_unmonitored_account_is_told_so_and_not_troubleshot(status):
     model = ScriptedModel([
         tool("find_customer", phone="415 555 0142"),
@@ -199,7 +199,7 @@ async def test_an_overdue_account_is_still_helped():
         tool("look_up_steps", problem="door sensor offline"),
         Reply(text="Let's start with the battery."),
     ])
-    convo = build(model, salesforce=FakeSalesforce(customer=a_customer(AccountStatus.PAST_DUE)))
+    convo = build(model, salesforce=FakeSalesforce(customer=a_customer("Past Due")))
     await convo.say("415 555 0142, code 8241, sensor offline")
     steps = next(c for c in convo.record.tool_calls if c["name"] == "look_up_steps")
     assert steps["result"]["steps_found"] is True
