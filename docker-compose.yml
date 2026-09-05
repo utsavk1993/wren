@@ -23,6 +23,11 @@ services:
   api:
     build: ./api
     env_file: .env
+    volumes:
+      # The schema file is shared with the db service rather than duplicated.
+      # Postgres applies it on first boot; the API reapplies it on every start
+      # so an existing database still picks up changes.
+      - ./db:/app/db:ro
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-wren}:${POSTGRES_PASSWORD:-wren}@db:5432/${POSTGRES_DB:-wren}
     ports:
