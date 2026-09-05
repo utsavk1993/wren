@@ -176,7 +176,7 @@ class Conversation:
             # number: enough to find the account, not enough to be a leak.
             customer=customer.external_id if customer else None,
             verified=self.state.verified,
-            account_status=customer.status.value if customer else None,
+            account_status=customer.status if customer else None,
             tools=[c["name"] for c in self.record.tool_calls],
             refusals=self.record.denials,
             steps_given=len(self.state.steps_given),
