@@ -14,6 +14,7 @@ from typing import Any
 
 import policy
 from llm import LanguageModel, Reply
+from observability import StageTimer
 from prompts import grounding_block, system_prompt
 from tools.definitions import TOOLS
 from tools.dispatch import Dispatcher
@@ -22,6 +23,16 @@ log = logging.getLogger(__name__)
 
 # A turn that has gone round this many times is looping rather than working.
 MAX_TOOL_ROUNDS = 6
+
+# Which budget a tool call is charged against. Looking something up in the
+# knowledge base is a different cost from calling out to another company's API,
+# and they are tuned separately.
+_TOOL_STAGES = {"look_up_steps": "retrieval"}
+
+
+def _stage_for(tool_name: str) -> str:
+    return _TOOL_STAGES.get(tool_name, "systems")
+
 
 WITHHELD = (
     "I can't go through the account on this call. I can arrange for someone to "
@@ -42,6 +53,7 @@ class CallRecord:
     turns: list[Turn] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     denials: list[str] = field(default_factory=list)
+    timings: list[dict[str, Any]] = field(default_factory=list)
     outcome: str | None = None
 
 
@@ -56,6 +68,8 @@ class Conversation:
     async def say(self, utterance: str) -> str:
         """Take what the caller said and produce what the agent says back."""
         self.record.turns.append(Turn("caller", utterance))
+        timer = StageTimer()
+        self._timer = timer
 
         # Read the caller before the model does. Some things end the call
         # regardless of what anyone was in the middle of.
@@ -78,6 +92,7 @@ class Conversation:
                 system=self._system_text(scope),
                 messages=self._messages,
                 tools=TOOLS,
+                timer=timer,
             )
             if not reply.wants_a_tool:
                 return self._respond(self._vet(reply.text))
@@ -87,7 +102,8 @@ class Conversation:
             )
             results = []
             for call in reply.tool_calls:
-                outcome = await self.dispatcher.run(call, self.state)
+                with timer.measure(_stage_for(call.name)):
+                    outcome = await self.dispatcher.run(call, self.state)
                 self.record.tool_calls.append({"name": call.name, "result": outcome})
                 if "refused" in outcome:
                     self.record.denials.append(outcome["refused"])
@@ -141,6 +157,9 @@ class Conversation:
         return text
 
     def _respond(self, text: str) -> str:
+        timer = getattr(self, "_timer", None)
+        if timer is not None:
+            self.record.timings.append(timer.report(self.record.id).as_log_fields())
         self.record.turns.append(Turn("agent", text))
         self._messages.append({"role": "assistant", "content": text})
         return text
