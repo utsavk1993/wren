@@ -52,9 +52,20 @@ CREATE TABLE IF NOT EXISTS calls (
     outcome              TEXT,
     escalated            BOOLEAN NOT NULL DEFAULT FALSE,
     escalation_reason    TEXT,
+    -- What was said, what was reached for, what refused, and how long each part
+    -- took. Written as the call runs rather than at the end, so a call that
+    -- drops still leaves behind what it had reached.
     transcript           JSONB NOT NULL DEFAULT '[]'::jsonb,
+    tool_calls           JSONB NOT NULL DEFAULT '[]'::jsonb,
+    refusals             JSONB NOT NULL DEFAULT '[]'::jsonb,
+    timings              JSONB NOT NULL DEFAULT '[]'::jsonb,
+    verified             BOOLEAN NOT NULL DEFAULT FALSE,
     started_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     ended_at             TIMESTAMPTZ
 );
+
+-- The list is always read newest first.
+CREATE INDEX IF NOT EXISTS calls_started_idx ON calls (started_at DESC);
 
 CREATE INDEX IF NOT EXISTS calls_customer_idx ON calls (customer_external_id);
