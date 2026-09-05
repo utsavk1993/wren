@@ -1,0 +1,8 @@
+# Each dependency is added when the code that imports it lands, so the image
+# stays small and build times stay short.
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic==2.13.5
+pydantic-settings==2.13.1
+python-dotenv==1.1.1
+httpx==0.28.1

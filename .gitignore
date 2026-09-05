@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.env.local
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+web/dist/
+*.local
+*.tsbuildinfo
+
+# Yarn (berry). The lockfile and .yarnrc.yml ARE committed; the cache is not.
+**/.yarn/*
+!**/.yarn/patches
+!**/.yarn/releases
+**/.pnp.*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Docker volumes
+pgdata/
+
+# Eval artifacts
+eval-report.json
+
+# Working docs, added to the repo later
+docs/

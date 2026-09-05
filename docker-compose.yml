@@ -1,0 +1,71 @@
+name: wren
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wren}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wren}
+      POSTGRES_DB: ${POSTGRES_DB:-wren}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Runs only when the volume is empty, i.e. on first boot.
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      # Host ports are configurable so Wren can run alongside other local stacks.
+      - "${DB_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wren} -d ${POSTGRES_DB:-wren}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wren}:${POSTGRES_PASSWORD:-wren}@db:5432/${POSTGRES_DB:-wren}
+    ports:
+      - "${API_HOST_PORT:-8001}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  agent:
+    build: ./agent
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wren}:${POSTGRES_PASSWORD:-wren}@db:5432/${POSTGRES_DB:-wren}
+      API_BASE_URL: http://api:8000
+    ports:
+      - "${AGENT_HOST_PORT:-7860}:7860"
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:7860/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  web:
+    build: ./web
+    environment:
+      VITE_API_BASE_URL: http://localhost:${API_HOST_PORT:-8001}
+      VITE_AGENT_BASE_URL: http://localhost:${AGENT_HOST_PORT:-7860}
+    ports:
+      - "${WEB_HOST_PORT:-5174}:5173"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
