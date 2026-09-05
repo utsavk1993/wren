@@ -39,16 +39,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+import observability
 from call import CallHandler, capabilities
 
-logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+observability.configure()
 log = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ready = capabilities()
-    log.info("agent ready: %s", ready)
+    log.info("agent ready: %s", {**ready, "tracing": observability.tracer().enabled})
     yield
 
 
