@@ -17,7 +17,7 @@ from datetime import datetime
 
 import httpx
 
-from .models import Device, DeviceStatus
+from .models import Device, DeviceStatus, is_faulty
 
 log = logging.getLogger(__name__)
 
@@ -26,10 +26,10 @@ log = logging.getLogger(__name__)
 # holding the turn open.
 REQUEST_TIMEOUT_SECONDS = 4.0
 
-FIELDS = (
-    "external_id,customer_external_id,name,device_type,"
-    "status,battery_pct,last_seen,recovers_on_reset,notes"
-)
+# Asked for by name rather than with a wildcard, and taken from the generated
+# record so the two cannot drift. Selecting less than the record needs fails at
+# the point of reading, which is a confusing place to find out about it.
+FIELDS = ",".join(Device.model_fields)
 
 
 class TelemetryError(RuntimeError):
@@ -84,7 +84,7 @@ class TelemetryClient:
             "order": "name.asc",
         })
         devices = [_to_device(r) for r in rows]
-        return sorted(devices, key=lambda d: (not d.is_faulty, d.name))
+        return sorted(devices, key=lambda d: (not is_faulty(d), d.name))
 
     async def get_device(self, device_external_id: str) -> Device | None:
         rows = await self._get({
@@ -103,7 +103,7 @@ class TelemetryClient:
                 f"{self.base_url}/rest/v1/devices",
                 params={"external_id": f"eq.{device_external_id}"},
                 headers={**self._headers, "Prefer": "return=representation"},
-                json={"status": status.value, "last_seen": datetime.now().astimezone().isoformat()},
+                json={"status": status, "last_seen": datetime.now().astimezone().isoformat()},
             )
         except httpx.HTTPError as exc:
             raise TelemetryError(f"could not update device state: {exc}") from exc
@@ -115,33 +115,13 @@ class TelemetryClient:
         return _to_device(rows[0]) if rows else None
 
 
-def _parse_timestamp(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        log.warning("could not read last_seen value %r", value)
-        return None
-
-
 def _to_device(row: dict) -> Device:
-    raw = row.get("status") or DeviceStatus.OFFLINE.value
-    try:
-        status = DeviceStatus(raw)
-    except ValueError:
-        # Equipment reporting something this code does not recognise is treated
-        # as not reporting, rather than assumed healthy.
-        log.warning("unrecognised device status %r, treating as offline", raw)
-        status = DeviceStatus.OFFLINE
-    return Device(
-        external_id=row.get("external_id") or "",
-        customer_external_id=row.get("customer_external_id") or "",
-        name=row.get("name") or "",
-        device_type=row.get("device_type") or "",
-        status=status,
-        battery_pct=row.get("battery_pct"),
-        last_seen=_parse_timestamp(row.get("last_seen")),
-        recovers_on_reset=bool(row.get("recovers_on_reset", True)),
-        notes=row.get("notes") or "",
-    )
+    """Turn one row into the generated record.
+
+    There is no coercion here on purpose. The columns have real types, so the
+    database cannot hold a status outside the allowed set and the generated
+    record will not accept one either. A row that fails to parse means the
+    schema has moved, and hearing about that is better than quietly reading a
+    broken sensor as healthy, which is what a lenient fallback would do.
+    """
+    return Device.model_validate(row)

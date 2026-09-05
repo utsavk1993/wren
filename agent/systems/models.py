@@ -1,5 +1,10 @@
 """Shapes returned by the system clients.
 
+The device shapes are generated from the telemetry platform's own description of
+its tables and re-exported here, so the values a status may take come from the
+database rather than from someone keeping two lists in step. The customer system
+publishes no types, so those are written out below.
+
 The orchestrator works with these rather than raw API payloads, so a change in
 how a connected system names its fields does not reach the conversation logic.
 """
@@ -10,6 +15,18 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import Enum
 
+from .generated import Device, DeviceKind, DeviceStatus
+
+__all__ = [
+    "AccountStatus",
+    "CaseHistory",
+    "Customer",
+    "Device",
+    "DeviceKind",
+    "DeviceStatus",
+    "SupportCase",
+    "is_faulty",
+]
 
 class AccountStatus(str, Enum):
     ACTIVE = "Active"
@@ -29,10 +46,16 @@ class AccountStatus(str, Enum):
         return self in (AccountStatus.ACTIVE, AccountStatus.PAST_DUE)
 
 
-class DeviceStatus(str, Enum):
-    ONLINE = "online"
-    OFFLINE = "offline"
-    LOW_BATTERY = "low_battery"
+ONLINE: DeviceStatus = "online"
+
+
+def is_faulty(device: Device) -> bool:
+    """Whether this equipment is failing to report.
+
+    A free function rather than something on the record, because the record is
+    generated from the database and nothing here should shadow it.
+    """
+    return device.status != ONLINE
 
 
 @dataclass(frozen=True)
@@ -69,23 +92,6 @@ class SupportCase:
     @property
     def is_open(self) -> bool:
         return self.status not in ("Closed", "Resolved")
-
-
-@dataclass(frozen=True)
-class Device:
-    external_id: str
-    customer_external_id: str
-    name: str
-    device_type: str
-    status: DeviceStatus
-    battery_pct: int | None
-    last_seen: datetime | None
-    recovers_on_reset: bool
-    notes: str = ""
-
-    @property
-    def is_faulty(self) -> bool:
-        return self.status is not DeviceStatus.ONLINE
 
 
 @dataclass(frozen=True)
