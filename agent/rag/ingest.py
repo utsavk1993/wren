@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 
+import numpy as np
 import psycopg
 from pgvector.psycopg import register_vector
 
@@ -55,7 +56,10 @@ async def ingest() -> dict[str, int]:
                 ) VALUES (%s, %s, %s, %s, %s, %s)
                 """,
                 [
-                    (c.article_slug, c.article_title, c.device_type, c.chunk_index, c.content, v)
+                    (
+                        c.article_slug, c.article_title, c.device_type,
+                        c.chunk_index, c.content, np.asarray(v, dtype=np.float32),
+                    )
                     for c, v in zip(chunks, vectors, strict=True)
                 ],
             )

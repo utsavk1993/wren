@@ -1,7 +1,7 @@
 ---
 title: How to arm and disarm the system
 device_type: control_panel
-symptoms: how to arm, how to disarm, arm away, arm stay, cannot arm, system will not set
+symptoms: how to arm, how to disarm, arm away, arm stay, cannot arm, system will not set, set the alarm, turn the alarm on, staying in tonight, arm at night, switch it on before bed, how do I turn it off
 ---
 
 There are two ways to arm the system.
