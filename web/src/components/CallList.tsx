@@ -25,7 +25,9 @@ export function CallList({
   return (
     <>
       <div className="listhead">
-        <span>{calls.length} calls</span>
+        <span>
+          {calls.length} calls <span className="following">· following</span>
+        </span>
         <button type="button" onClick={onRefresh}>
           Refresh
         </button>
@@ -52,6 +54,7 @@ export function CallList({
               <td className="num">{call.tool_calls}</td>
               <td className="num">{Math.round(Number(call.total_ms))} ms</td>
               <td>
+                {!call.ended_at && <span className="tag live">in progress</span>}
                 {call.escalated && <span className="tag escalated">handed off</span>}
                 {call.refusals > 0 && (
                   <span className="tag refused">{call.refusals} refused</span>
