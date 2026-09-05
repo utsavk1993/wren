@@ -18,7 +18,7 @@ from typing import Any
 import policy
 from llm import ToolCall
 from rag.retrieve import Retriever
-from systems.models import DeviceStatus
+from systems.models import ONLINE, DeviceStatus
 from systems.salesforce import SalesforceClient
 from systems.telemetry import TelemetryClient, TelemetryError
 
@@ -120,7 +120,7 @@ class Dispatcher:
                         "id": d.external_id,
                         "name": d.name,
                         "type": d.device_type.replace("_", " "),
-                        "reporting": d.status is DeviceStatus.ONLINE,
+                        "reporting": d.status == ONLINE,
                     }
                     for d in devices
                 ] if customer.status.is_monitored else [],
@@ -179,8 +179,8 @@ class Dispatcher:
                     "id": d.external_id,
                     "name": d.name,
                     "type": d.device_type.replace("_", " "),
-                    "reporting": d.status is DeviceStatus.ONLINE,
-                    "status": d.status.value,
+                    "reporting": d.status == ONLINE,
+                    "status": d.status,
                     "battery_pct": d.battery_pct,
                 }
                 for d in devices
@@ -203,17 +203,17 @@ class Dispatcher:
 
         # Whether a reset actually worked is decided by the equipment, not by
         # the caller reporting that they did the step.
-        if device.status is not DeviceStatus.ONLINE and device.recovers_on_reset:
-            device = await self.telemetry.set_device_status(device_id, DeviceStatus.ONLINE)
+        if device.status != ONLINE and device.recovers_on_reset:
+            device = await self.telemetry.set_device_status(device_id, ONLINE)
 
         state.device_under_discussion = device
         return {
             "id": device.external_id,
             "name": device.name,
-            "reporting": device.status is DeviceStatus.ONLINE,
+            "reporting": device.status == ONLINE,
             "guidance": (
                 "It is reporting again. Confirm that with the caller and close the call."
-                if device.status is DeviceStatus.ONLINE
+                if device.status == ONLINE
                 else "Still not reporting. Say so honestly rather than trying again."
             ),
         }

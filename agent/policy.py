@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 
-from systems.models import CaseHistory, Customer, Device
+from systems.models import CaseHistory, Customer, Device, is_faulty
 
 # Two tries is enough to survive a mis-hearing and few enough to be no use to
 # someone working through possibilities.
@@ -209,7 +209,7 @@ def may_troubleshoot(state: CallState) -> Ruling:
             "and get them a person.",
         )
 
-    if device and device.is_faulty and not device.recovers_on_reset and state.steps_given:
+    if device and is_faulty(device) and not device.recovers_on_reset and state.steps_given:
         return _denied(
             Denial.REPEAT_FAILURE,
             "This equipment will not come back from a reset. Stop and arrange a "

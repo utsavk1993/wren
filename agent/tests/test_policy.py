@@ -24,7 +24,7 @@ from policy import (
     may_troubleshoot,
     should_escalate,
 )
-from systems.models import AccountStatus, CaseHistory, Customer, Device, DeviceStatus, SupportCase
+from systems.models import AccountStatus, CaseHistory, Customer, Device, SupportCase
 
 
 def make_customer(status=AccountStatus.ACTIVE) -> Customer:
@@ -37,11 +37,12 @@ def make_customer(status=AccountStatus.ACTIVE) -> Customer:
     )
 
 
-def make_device(recovers=True, status=DeviceStatus.OFFLINE) -> Device:
+def make_device(recovers=True, status="offline") -> Device:
     return Device(
         external_id="DEV-2001", customer_external_id="CUST-1001", name="Front Door",
         device_type="door_sensor", status=status, battery_pct=68,
-        last_seen=datetime(2026, 9, 1), recovers_on_reset=recovers,
+        last_seen=datetime(2026, 9, 1), recovers_on_reset=recovers, notes="",
+        updated_at=datetime(2026, 9, 1),
     )
 
 

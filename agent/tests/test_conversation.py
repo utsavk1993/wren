@@ -15,7 +15,7 @@ import pytest
 import policy
 from conversation import WITHHELD, Conversation
 from llm import Reply, ScriptedModel, ToolCall
-from systems.models import AccountStatus, CaseHistory, Customer, Device, DeviceStatus, SupportCase
+from systems.models import AccountStatus, CaseHistory, Customer, Device, SupportCase
 
 
 def a_customer(status=AccountStatus.ACTIVE) -> Customer:
@@ -28,11 +28,12 @@ def a_customer(status=AccountStatus.ACTIVE) -> Customer:
     )
 
 
-def a_device(recovers=True, status=DeviceStatus.OFFLINE) -> Device:
+def a_device(recovers=True, status="offline") -> Device:
     return Device(
         external_id="DEV-2001", customer_external_id="CUST-1001", name="Front Door",
         device_type="door_sensor", status=status, battery_pct=68,
-        last_seen=datetime(2026, 9, 1), recovers_on_reset=recovers,
+        last_seen=datetime(2026, 9, 1), recovers_on_reset=recovers, notes="",
+        updated_at=datetime(2026, 9, 1),
     )
 
 
@@ -76,7 +77,7 @@ class FakeTelemetry:
     async def set_device_status(self, device_external_id, status):
         for i, d in enumerate(self.devices):
             if d.external_id == device_external_id:
-                updated = Device(**{**d.__dict__, "status": status})
+                updated = d.model_copy(update={"status": status})
                 self.devices[i] = updated
                 return updated
         return None
