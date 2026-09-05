@@ -6,6 +6,9 @@ hands you to a person when it cannot help.
 
 Built as a portfolio project modeled on Cresta's Brinks Home deployment.
 
+**[How it works](docs/architecture.md)** walks through a whole call with
+diagrams, written for someone who has not read the code.
+
 ## Architecture
 
 A streaming cascade — every stage streams into the next, so the caller never
