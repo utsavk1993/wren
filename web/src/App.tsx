@@ -101,13 +101,23 @@ function LiveCall() {
 
 function History() {
   const [openId, setOpenId] = useState<string | null>(null);
+  // Both keep following, so a call that is happening right now fills in on
+  // screen rather than needing to be asked for again.
   const { calls, error, refresh } = useCallList();
-  const { call } = useCallDetail(openId);
+  const { call, error: detailError } = useCallDetail(openId);
 
-  if (error) return <p className="error">{error}</p>;
-  if (openId && call) return <CallDetail call={call} onBack={() => setOpenId(null)} />;
-  if (openId) return <p className="empty">Loading call…</p>;
-  return <CallList calls={calls} onOpen={setOpenId} onRefresh={refresh} />;
+  if (openId) {
+    if (detailError) return <p className="error">{detailError}</p>;
+    if (call) return <CallDetail call={call} onBack={() => setOpenId(null)} />;
+    return <p className="empty">Loading call…</p>;
+  }
+
+  return (
+    <>
+      {error && <p className="error">Couldn't load calls: {error}</p>}
+      <CallList calls={calls} onOpen={setOpenId} onRefresh={refresh} />
+    </>
+  );
 }
 
 export function App() {

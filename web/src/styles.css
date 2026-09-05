@@ -197,3 +197,7 @@ table.calls tbody tr:hover { background: var(--caller); }
   .bar { display: none; }
   table.calls th:nth-child(4), table.calls td:nth-child(4) { display: none; }
 }
+
+.following { color: var(--accent); }
+.crash { white-space: pre-wrap; font-size: 0.75rem; background: var(--caller);
+         padding: 0.75rem; border-radius: 0.4rem; overflow-x: auto; }
