@@ -17,8 +17,10 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- by keyword.
 -- ---------------------------------------------------------------------------
 
--- 1536 dimensions matches text-embedding-3-small. Changing embedding model
--- means changing this width and re-ingesting every article.
+-- The vector width belongs to whichever embedding model is in use, so the table
+-- is built to match it. Changing models means rebuilding this table and
+-- re-ingesting every article, which the ingestion step does when it notices the
+-- width no longer agrees.
 CREATE TABLE IF NOT EXISTS kb_chunks (
     id            BIGSERIAL PRIMARY KEY,
     article_slug  TEXT NOT NULL,
@@ -26,7 +28,7 @@ CREATE TABLE IF NOT EXISTS kb_chunks (
     device_type   TEXT,
     chunk_index   INTEGER NOT NULL,
     content       TEXT NOT NULL,
-    embedding     VECTOR(1536),
+    embedding     VECTOR(384),
     UNIQUE (article_slug, chunk_index)
 );
 
