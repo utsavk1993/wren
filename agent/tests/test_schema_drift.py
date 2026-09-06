@@ -22,7 +22,7 @@ import os
 import httpx
 import pytest
 
-from systems.models import AccountStatus, DeviceStatus
+from systems.models import DeviceStatus
 from systems.salesforce import API_VERSION, SalesforceClient
 
 needs_telemetry = pytest.mark.skipif(
@@ -79,13 +79,38 @@ async def test_the_device_table_still_has_the_columns_this_code_reads():
 
 
 @needs_customers
-async def test_account_status_values_still_match_the_ones_declared_here():
-    """The values are what make this worth checking.
+async def test_the_generated_customer_types_are_not_stale():
+    """The customer types are generated too, so they can only go stale.
 
-    An account status added over there and not here is read as suspended, which
-    stops the agent troubleshooting for those households entirely. That is the
-    safe behaviour, and nothing about it is visible until someone notices the
-    calls going nowhere.
+    Nothing here restates what an account status may be. What can go wrong is a
+    field or a value changing over there and nobody regenerating, which is what
+    this catches.
+    """
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(root / "seed"))
+    from gen_types import CRM_FIELDS, _crm_token, _describe, generate_crm
+
+    instance = os.environ["SALESFORCE_INSTANCE_URL"]
+    token = _crm_token(instance)
+    described = {name: _describe(instance, token, name) for name in CRM_FIELDS}
+    fresh = generate_crm(described)
+    committed = (root / "agent" / "systems" / "generated_crm.py").read_text()
+    assert fresh == committed, (
+        "the customer system has changed since the types were generated; "
+        "run `python seed/gen_types.py`"
+    )
+
+
+@needs_customers
+async def test_the_status_field_still_refuses_values_outside_its_list():
+    """The whole arrangement rests on that system enforcing the list.
+
+    If the field stopped being restricted, a status nobody here has heard of
+    could arrive, and the generated type would reject the record rather than the
+    value being handled. Better to know the guarantee has gone.
     """
     client = SalesforceClient()
     try:
@@ -96,19 +121,14 @@ async def test_account_status_values_still_match_the_ones_declared_here():
                 headers={"Authorization": f"Bearer {token}"},
             )
         response.raise_for_status()
-        fields = {f["name"]: f for f in response.json()["fields"]}
+        field = next(
+            f for f in response.json()["fields"] if f["name"] == "Account_Status__c"
+        )
     finally:
         await client.aclose()
-
-    missing = EXPECTED_ACCOUNT_FIELDS - set(fields)
-    assert not missing, f"the customer system no longer has: {sorted(missing)}"
-
-    over_there = {v["value"] for v in fields["Account_Status__c"]["picklistValues"]}
-    over_here = {s.value for s in AccountStatus}
-    assert over_there == over_here, (
-        f"account statuses have diverged. "
-        f"only in the customer system: {sorted(over_there - over_here)}; "
-        f"only here: {sorted(over_here - over_there)}"
+    assert field["restrictedPicklist"], (
+        "account status no longer refuses values outside its list, so the "
+        "generated type is no longer guaranteed to match what can arrive"
     )
 
 

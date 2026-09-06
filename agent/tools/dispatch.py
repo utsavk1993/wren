@@ -18,7 +18,7 @@ from typing import Any
 import policy
 from llm import ToolCall
 from rag.retrieve import Retriever
-from systems.models import ONLINE, DeviceStatus
+from systems.models import ONLINE, DeviceStatus, is_monitored
 from systems.salesforce import SalesforceClient
 from systems.telemetry import TelemetryClient, TelemetryError
 
@@ -113,8 +113,8 @@ class Dispatcher:
                 "verified": True,
                 "name": customer.first_name,
                 "plan": customer.plan,
-                "account_status": customer.status.value,
-                "monitored": customer.status.is_monitored,
+                "account_status": customer.status,
+                "monitored": is_monitored(customer.status),
                 "equipment": [
                     {
                         "id": d.external_id,
@@ -123,12 +123,12 @@ class Dispatcher:
                         "reporting": d.status == ONLINE,
                     }
                     for d in devices
-                ] if customer.status.is_monitored else [],
+                ] if is_monitored(customer.status) else [],
                 "guidance": (
                     "Greet them by name and ask what is wrong."
-                    if customer.status.is_monitored
+                    if is_monitored(customer.status)
                     else (
-                        f"This account is {customer.status.value.lower()}, so the "
+                        f"This account is {(customer.status or 'unknown').lower()}, so the "
                         "equipment is not being monitored. Say that plainly, do not "
                         "troubleshoot, and offer the team who can restart the service."
                     )
