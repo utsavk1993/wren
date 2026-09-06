@@ -17,3 +17,6 @@ anthropic==1.4.0
 
 # Carrying a call over a websocket.
 websockets==17.1
+
+# Tracing, only used when credentials are configured.
+langfuse==3.9.0

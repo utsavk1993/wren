@@ -14,7 +14,7 @@ from typing import Any
 
 import policy
 from llm import LanguageModel, Reply
-from observability import StageTimer
+from observability import StageTimer, log_turn, tracer
 from prompts import grounding_block, system_prompt
 from tools.definitions import TOOLS
 from tools.dispatch import Dispatcher
@@ -158,8 +158,31 @@ class Conversation:
 
     def _respond(self, text: str) -> str:
         timer = getattr(self, "_timer", None)
+        timings: dict[str, Any] = {}
         if timer is not None:
-            self.record.timings.append(timer.report(self.record.id).as_log_fields())
+            timings = timer.report(self.record.id).as_log_fields()
+            self.record.timings.append(timings)
+
+        said = next(
+            (t.text for t in reversed(self.record.turns) if t.speaker == "caller"), ""
+        )
+        customer = self.state.customer
+        log_turn(
+            log,
+            self.record.id,
+            said=said,
+            replied=text,
+            # The identifier this project assigns, not the caller's name or
+            # number: enough to find the account, not enough to be a leak.
+            customer=customer.external_id if customer else None,
+            verified=self.state.verified,
+            account_status=customer.status.value if customer else None,
+            tools=[c["name"] for c in self.record.tool_calls],
+            refusals=self.record.denials,
+            steps_given=len(self.state.steps_given),
+            **timings,
+        )
+        tracer().turn(self.record.id, said, text, **timings)
         self.record.turns.append(Turn("agent", text))
         self._messages.append({"role": "assistant", "content": text})
         return text
