@@ -33,9 +33,8 @@ def capabilities() -> dict[str, Any]:
         "transport": configured_kind().value,
         "sample_rate_hz": profile.sample_rate_hz,
         "speech_in": bool(os.environ.get("DEEPGRAM_API_KEY")),
-        "speech_out": bool(
-            os.environ.get("CARTESIA_API_KEY") and os.environ.get("CARTESIA_VOICE_ID")
-        ),
+        # Both halves come from the same service, so one key decides both.
+        "speech_out": bool(os.environ.get("DEEPGRAM_API_KEY")),
         "conversation": bool(os.environ.get("ANTHROPIC_API_KEY")),
     }
 

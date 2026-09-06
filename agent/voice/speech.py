@@ -20,9 +20,14 @@ import httpx
 
 log = logging.getLogger(__name__)
 
-DEEPGRAM_URL = "wss://api.deepgram.com/v1/listen"
-CARTESIA_URL = "https://api.cartesia.ai/tts/bytes"
-CARTESIA_VERSION = "2024-06-10"
+LISTEN_URL = "wss://api.deepgram.com/v1/listen"
+SPEAK_URL = "https://api.deepgram.com/v1/speak"
+
+# Both halves come from the same service. The alternative was one company for
+# hearing and another for speaking, which meant two accounts, two bills and two
+# places to look when something went wrong, for a difference of fifty
+# milliseconds in the one stage that has never been the slow part.
+DEFAULT_VOICE = "aura-2-thalia-en"
 
 # Ends a sentence, but not when the full stop belongs to an abbreviation or a
 # decimal. Splitting on those hands speech synthesis a fragment.
@@ -106,7 +111,7 @@ class Transcriber:
             "endpointing": "false",
             "smart_format": "true",
         }
-        return DEEPGRAM_URL + "?" + "&".join(f"{k}={v}" for k, v in params.items())
+        return LISTEN_URL + "?" + "&".join(f"{k}={v}" for k, v in params.items())
 
     @staticmethod
     def read_event(raw: str | bytes) -> Transcript | None:
@@ -135,35 +140,32 @@ class Speaker:
     def __init__(
         self,
         api_key: str | None = None,
-        voice_id: str | None = None,
+        voice: str | None = None,
         sample_rate_hz: int = 16000,
         http: httpx.AsyncClient | None = None,
     ) -> None:
-        self.api_key = api_key or os.environ.get("CARTESIA_API_KEY", "")
-        self.voice_id = voice_id or os.environ.get("CARTESIA_VOICE_ID", "")
+        self.api_key = api_key or os.environ.get("DEEPGRAM_API_KEY", "")
+        self.voice = voice or os.environ.get("DEEPGRAM_VOICE", DEFAULT_VOICE)
         self.sample_rate_hz = sample_rate_hz
         self._http = http or httpx.AsyncClient(timeout=20.0)
         self._owns_http = http is None
 
     @property
     def configured(self) -> bool:
-        return bool(self.api_key and self.voice_id)
+        return bool(self.api_key)
 
     async def aclose(self) -> None:
         if self._owns_http:
             await self._http.aclose()
 
-    def _body(self, text: str) -> dict:
+    def _params(self) -> dict[str, str]:
         return {
-            "model_id": "sonic-2",
-            "transcript": text,
-            "voice": {"mode": "id", "id": self.voice_id},
-            "output_format": {
-                "container": "raw",
-                "encoding": "pcm_s16le",
-                "sample_rate": self.sample_rate_hz,
-            },
-            "language": "en",
+            "model": self.voice,
+            # Raw signed 16-bit audio, matching what the browser plays and what
+            # the transcription side is given, so nothing has to be converted
+            # in between.
+            "encoding": "linear16",
+            "sample_rate": str(self.sample_rate_hz),
         }
 
     async def speak(
@@ -175,12 +177,12 @@ class Speaker:
         if not self.configured:
             raise RuntimeError("no speech synthesis credentials configured")
         headers = {
-            "X-API-Key": self.api_key,
-            "Cartesia-Version": CARTESIA_VERSION,
+            "Authorization": f"Token {self.api_key}",
             "Content-Type": "application/json",
         }
         async with self._http.stream(
-            "POST", CARTESIA_URL, headers=headers, json=self._body(text)
+            "POST", SPEAK_URL, headers=headers,
+            params=self._params(), json={"text": text},
         ) as response:
             if response.status_code >= 400:
                 body = await response.aread()
