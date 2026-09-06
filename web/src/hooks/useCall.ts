@@ -99,7 +99,11 @@ export function useCall() {
     socket.current?.send(JSON.stringify({ type: "interrupt" }));
   }, []);
 
-  useEffect(() => () => socket.current?.close(), []);
+  useEffect(() => {
+    // Closing the socket if the component goes away, so a call does not stay
+    // open behind a page nobody is looking at.
+    return () => socket.current?.close();
+  }, []);
 
   return { state, lines, timing, capabilities, error, start, hangUp, say, interrupt };
 }

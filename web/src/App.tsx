@@ -23,7 +23,12 @@ function LiveCall() {
   const end = useRef<HTMLDivElement>(null);
   const onCall = state !== "idle" && state !== "ended";
 
-  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth" }), [lines]);
+  useEffect(() => {
+    // A block body, not a concise one. Whatever the expression evaluates to is
+    // otherwise handed back to React as the cleanup function, and React calls
+    // whatever it is given when the component goes away.
+    end.current?.scrollIntoView({ behavior: "smooth" });
+  }, [lines]);
 
   const send = (event: React.FormEvent) => {
     event.preventDefault();
