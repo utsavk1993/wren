@@ -50,7 +50,21 @@ def test_a_complete_sentence_ends_the_turn_quickly():
     detector = TurnDetector()
     detector.heard_speech("my door sensor is offline")
     assert not detector.heard_silence(300).finished
-    assert detector.heard_silence(250).finished
+    assert detector.heard_silence(SETTLED_SILENCE_MS).finished
+
+
+def test_a_gap_between_recognised_phrases_does_not_end_a_turn():
+    """The transcription service reports in batches, not continuously.
+
+    A few hundred milliseconds pass between phrases while someone is still
+    talking. Treating that as the caller finishing cuts them off halfway
+    through their sentence, which is what happened before this threshold moved.
+    """
+    detector = TurnDetector()
+    detector.heard_speech("my back door sensor")
+    assert not detector.heard_silence(400).finished, "still mid-sentence"
+    detector.heard_speech("my back door sensor is offline")
+    assert detector.heard_silence(SETTLED_SILENCE_MS + 50).finished
 
 
 def test_a_caller_thinking_mid_sentence_is_not_cut_off():

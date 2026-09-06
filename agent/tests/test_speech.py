@@ -43,12 +43,34 @@ def test_nothing_is_left_behind_at_the_end():
     assert buffer.flush() == []
 
 
-def test_endpointing_is_not_delegated_to_the_provider():
-    # When a caller has finished a thought is decided here, from how complete
-    # the sentence sounds, not by the transcription service watching for silence.
+def test_the_service_reports_pauses_and_this_side_judges_them():
+    """Hearing silence and deciding a turn is over are different jobs.
+
+    The service has the audio, so only it can tell speech from quiet. It cannot
+    tell whether a quiet caller has finished a thought or is halfway through
+    one, because that needs the words. Splitting it this way was not the first
+    attempt: leaving the service out of it entirely meant guessing at silence
+    from the gaps between its messages, which cut callers off after three
+    words.
+    """
     url = Transcriber(api_key="x").connection_url()
-    assert "endpointing=false" in url
     assert "interim_results=true" in url
+    # A short pause closes a phrase so the words are final.
+    assert "endpointing=300" in url
+    # A longer one is what actually ends a turn.
+    assert "utterance_end_ms=1000" in url
+
+
+def test_a_reported_pause_is_carried_through():
+    import json
+    end = Transcriber.read_event(json.dumps({"type": "UtteranceEnd"}))
+    assert end is not None and end.paused, "a pause must reach the turn rules"
+
+    mid = Transcriber.read_event(json.dumps({
+        "is_final": False,
+        "channel": {"alternatives": [{"transcript": "my back door", "confidence": 0.9}]},
+    }))
+    assert mid is not None and not mid.paused, "words alone are not a pause"
 
 
 def test_the_sample_rate_follows_the_transport():

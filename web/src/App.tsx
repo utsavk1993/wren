@@ -18,8 +18,12 @@ const STATE_LABEL: Record<CallState, string> = {
 type Tab = "call" | "history";
 
 function LiveCall() {
-  const { state, lines, timing, capabilities, error, start, hangUp, say } = useCall();
+  const { state, lines, hearing, timing, capabilities, error, start, hangUp, say } =
+    useCall();
   const [draft, setDraft] = useState("");
+  // Speaking is the point. Typing stays for when there is no microphone, or
+  // for working on the conversation without talking out loud.
+  const [typing, setTyping] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   const onCall = state !== "idle" && state !== "ended";
 
@@ -52,10 +56,9 @@ function LiveCall() {
       <main className="transcript" aria-live="polite">
         {lines.length === 0 && !onCall && (
           <p className="empty">
-            Start a call to talk to the agent.
-            {capabilities && !canSpeak && (
-              <> Speech isn't configured here, so the call is typed.</>
-            )}
+            {canSpeak
+              ? "Call, allow the microphone, and just talk."
+              : "Speech isn't configured here, so the call is typed."}
           </p>
         )}
         {lines.map((line) => (
@@ -67,6 +70,12 @@ function LiveCall() {
             <p>{line.text}</p>
           </div>
         ))}
+        {hearing && (
+          <div className="line caller hearing">
+            <span className="who">You</span>
+            <p>{hearing}</p>
+          </div>
+        )}
         <div ref={end} />
       </main>
 
@@ -85,15 +94,30 @@ function LiveCall() {
           </button>
         ) : (
           <>
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="Say something"
-              autoFocus
-            />
-            <button type="submit" disabled={!draft.trim()}>
-              Send
-            </button>
+            {typing || !canSpeak ? (
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Type instead"
+                autoFocus
+              />
+            ) : (
+              <span className="speaking-hint">
+                {state === "speaking"
+                  ? "Wren is speaking — talk over it to interrupt"
+                  : "Listening. Just talk."}
+              </span>
+            )}
+            {(typing || !canSpeak) && (
+              <button type="submit" disabled={!draft.trim()}>
+                Send
+              </button>
+            )}
+            {canSpeak && (
+              <button type="button" onClick={() => setTyping(!typing)}>
+                {typing ? "Speak" : "Type"}
+              </button>
+            )}
             <button type="button" className="hangup" onClick={hangUp}>
               Hang up
             </button>

@@ -44,6 +44,10 @@ class Transcript:
     text: str
     is_final: bool
     confidence: float = 1.0
+    # The service heard actual silence after this phrase. It has the audio and
+    # can tell speech from quiet; this side only sees the gaps between
+    # messages, which say nothing about whether anyone is still talking.
+    paused: bool = False
 
 
 def split_into_sentences(text: str) -> list[str]:
@@ -85,9 +89,11 @@ class SentenceBuffer:
 class Transcriber:
     """Streaming speech to text.
 
-    Endpointing is left to this side rather than delegated to the provider: the
-    rules about when a caller has finished a thought belong with the
-    conversation, not with whichever service is doing the transcription.
+    The work is split rather than handed over wholesale. The service reports
+    when the caller has stopped making noise, which needs the audio and so can
+    only be done there. Whether a stopped caller has finished a thought is
+    decided here, because "I want to reset the..." is a pause and "my sensor is
+    offline" is an ending, and telling those apart needs the words.
     """
 
     def __init__(self, api_key: str | None = None, sample_rate_hz: int = 16000) -> None:
@@ -106,10 +112,16 @@ class Transcriber:
             "channels": "1",
             "interim_results": "true",
             "punctuate": "true",
-            # Off on purpose. Ending a turn is decided here, using how finished
-            # the sentence sounds, not by silence alone.
-            "endpointing": "false",
             "smart_format": "true",
+            # Closes a phrase after a short pause so the words are finalised
+            # promptly. This does not end a turn: people pause inside sentences
+            # constantly, and treating every one as the end cuts them off after
+            # three words.
+            "endpointing": "300",
+            # This is the signal that ends a turn. A full second of actual
+            # silence, measured from the audio, which is something only the
+            # service can do.
+            "utterance_end_ms": "1000",
         }
         return LISTEN_URL + "?" + "&".join(f"{k}={v}" for k, v in params.items())
 
@@ -120,6 +132,10 @@ class Transcriber:
             payload = json.loads(raw)
         except (TypeError, ValueError):
             return None
+        # A quiet stretch after the caller stopped, carrying no words.
+        if payload.get("type") == "UtteranceEnd":
+            return Transcript(text="", is_final=True, paused=True)
+
         alternatives = (payload.get("channel") or {}).get("alternatives") or []
         if not alternatives:
             return None

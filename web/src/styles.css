@@ -201,3 +201,7 @@ table.calls tbody tr:hover { background: var(--caller); }
 .following { color: var(--accent); }
 .crash { white-space: pre-wrap; font-size: 0.75rem; background: var(--caller);
          padding: 0.75rem; border-radius: 0.4rem; overflow-x: auto; }
+
+/* What is being picked up, before the turn is judged finished. */
+.line.hearing p { opacity: 0.55; border-style: dashed; }
+.speaking-hint { flex: 1; padding: 0.6rem 0; color: var(--muted); font-size: 0.9rem; }

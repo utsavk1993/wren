@@ -19,17 +19,23 @@ from dataclasses import dataclass, field
 
 log = logging.getLogger(__name__)
 
-# Silence after a sentence that sounds complete. Short, because waiting here is
-# dead air the caller notices.
-SETTLED_SILENCE_MS = 500
+# Silence after a sentence that sounds complete.
+#
+# Quiet is measured by how long it has been since the transcription service
+# recognised anything, and that service reports in batches rather than
+# continuously. A gap of several hundred milliseconds appears mid-sentence while
+# someone is still speaking, so a threshold tuned to real silence cuts callers
+# off halfway through. This is set above that batching gap, which costs a little
+# dead air and is worth it.
+SETTLED_SILENCE_MS = 900
 
 # Silence after something that sounds unfinished. Longer, because the caller is
 # almost certainly still assembling the sentence.
-UNFINISHED_SILENCE_MS = 1100
+UNFINISHED_SILENCE_MS = 1600
 
 # However unfinished it sounds, this much quiet means the turn is over. Without
 # it, a caller who trails off is never answered.
-MAX_SILENCE_MS = 2000
+MAX_SILENCE_MS = 2600
 
 # Enough speech over the agent to count as interrupting rather than a cough or a
 # door closing.

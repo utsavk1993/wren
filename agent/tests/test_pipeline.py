@@ -8,6 +8,7 @@ import pytest
 
 from voice.pipeline import ACKNOWLEDGE_AFTER_MS, WORKING_ON_IT, CallSession, VoicePipeline
 from voice.speech import Transcript
+from voice.turn_taking import SETTLED_SILENCE_MS, UNFINISHED_SILENCE_MS
 
 
 class SlowConversation:
@@ -34,17 +35,23 @@ def build(reply="Take the cover off. Remove the battery.", delay_s=0.0) -> Voice
 async def test_a_finished_sentence_produces_a_turn():
     pipe = build()
     assert await pipe.heard(Transcript("my sensor is offline", is_final=True)) is None
-    assert await pipe.heard(Transcript("", is_final=True), silence_ms=600) == \
-        "my sensor is offline"
+    assert await pipe.heard(
+        Transcript("", is_final=True), silence_ms=SETTLED_SILENCE_MS
+    ) == "my sensor is offline"
 
 
 async def test_a_caller_pausing_mid_sentence_is_not_cut_off():
     pipe = build()
     await pipe.heard(Transcript("I want to reset the", is_final=False))
-    assert await pipe.heard(Transcript("", is_final=False), silence_ms=600) is None
+    # Long enough to end a finished sentence, but this one is not finished.
+    assert await pipe.heard(
+        Transcript("", is_final=False), silence_ms=SETTLED_SILENCE_MS
+    ) is None
+    assert SETTLED_SILENCE_MS < UNFINISHED_SILENCE_MS, "the whole point of the two"
     await pipe.heard(Transcript("I want to reset the panel", is_final=True))
-    assert await pipe.heard(Transcript("", is_final=True), silence_ms=600) == \
-        "I want to reset the panel"
+    assert await pipe.heard(
+        Transcript("", is_final=True), silence_ms=SETTLED_SILENCE_MS
+    ) == "I want to reset the panel"
 
 
 # ---- filling the wait ----

@@ -21,7 +21,8 @@ from systems.salesforce import SalesforceClient
 from systems.telemetry import TelemetryClient
 from tools.dispatch import Dispatcher
 from voice.pipeline import GREETING, CallSession, Utterance, VoicePipeline
-from voice.speech import Speaker, Transcriber, Transcript
+from voice.listener import Listener
+from voice.speech import Speaker, Transcriber
 from voice.transport import audio_profile, configured_kind
 
 log = logging.getLogger(__name__)
@@ -70,12 +71,17 @@ class CallHandler:
         self.pipeline = VoicePipeline(
             CallSession(conversation=conversation, speaker=self.speaker)
         )
+        # Audio from the browser goes through here rather than the browser
+        # talking to the transcription service itself, which would put the
+        # credentials in a page anyone can read.
+        self.listener = Listener(self.transcriber, self._heard)
         # One identifier for the call, the same one the record and the logs use.
         # Two would mean a log line and a stored call could not be matched up.
         self.call_id = conversation.record.id
 
     async def aclose(self) -> None:
         # However the call ended, including badly, the record is closed off.
+        await self.listener.aclose()
         self.pipeline.session.conversation.ended()
         await self.salesforce.aclose()
         await self.telemetry.aclose()
@@ -90,7 +96,19 @@ class CallHandler:
             json.dumps({"type": "audio", "pcm16": base64.b64encode(chunk).decode()})
         )
 
+    async def _heard(self, transcript, silence_ms: float) -> None:
+        """A phrase, or a report of how long the caller has been quiet."""
+        if transcript.text:
+            # Shown as it is recognised, so the caller can see they are heard
+            # before the agent has decided they have finished.
+            await self._send("hearing", text=transcript.text)
+        said = await self.pipeline.heard(transcript, silence_ms=silence_ms)
+        if said:
+            self.listener.turn_taken()
+            await self._handle(said)
+
     async def run(self) -> None:
+        await self.listener.start()
         await self._send("ready", call_id=self.call_id, **capabilities())
         await self._say(Utterance(GREETING))
 
@@ -102,19 +120,12 @@ class CallHandler:
                 continue
 
             kind = message.get("type")
-            if kind == "text":
+            if kind == "audio":
+                # The caller speaking. Straight through to be transcribed.
+                await self.listener.send(base64.b64decode(message.get("pcm16", "")))
+            elif kind == "text":
                 # Typed straight in, so no transcription and no turn detection.
                 said = str(message.get("text", "")).strip()
-                if said:
-                    await self._handle(said)
-            elif kind == "transcript":
-                said = await self.pipeline.heard(
-                    Transcript(
-                        text=str(message.get("text", "")),
-                        is_final=bool(message.get("is_final")),
-                    ),
-                    silence_ms=float(message.get("silence_ms", 0)),
-                )
                 if said:
                     await self._handle(said)
             elif kind == "interrupt":
