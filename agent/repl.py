@@ -39,7 +39,7 @@ def _show_state(state: policy.CallState) -> None:
         print(f"  account:  {customer.external_id}  {customer.plan}  {customer.status.value}")
     if state.device_under_discussion:
         d = state.device_under_discussion
-        print(f"  device:   {d.name} ({d.external_id}) {d.status.value}")
+        print(f"  device:   {d.name} ({d.external_id}) {d.status}")
     print(f"  steps given: {len(state.steps_given)}{RESET}")
 
 

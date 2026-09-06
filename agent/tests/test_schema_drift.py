@@ -154,20 +154,46 @@ async def test_the_case_fields_this_code_writes_still_exist():
     assert not missing, f"the customer system no longer has: {sorted(missing)}"
 
 
-def test_device_statuses_here_match_the_constraint_in_the_schema():
-    """The database restricts this column; the published schema does not say so.
+@needs_telemetry
+async def test_the_generated_device_types_are_not_stale():
+    """The device types are generated, so they cannot drift, only go stale.
 
-    Anything generated from that schema types the column as an ordinary string,
-    which is why the values are pinned against the file that actually declares
-    them.
+    Nothing here restates what a device status may be; the values come from the
+    database. What can go wrong is the table changing and nobody regenerating,
+    so the check is that generating again would produce what is committed.
     """
+    import sys
     from pathlib import Path
 
-    schema = (Path(__file__).resolve().parents[2] / "supabase" / "schema.sql").read_text()
-    line = next(
-        ln for ln in schema.splitlines()
-        if "status" in ln and "CHECK" in ln and "device_type" not in ln
+    root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(root / "seed"))
+    from gen_types import _fetch_schema, generate
+
+    schema = _fetch_schema(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SECRET_KEY"])
+    fresh = generate(schema, ["devices"])
+    committed = (root / "agent" / "systems" / "generated.py").read_text()
+    assert fresh == committed, (
+        "the telemetry tables have changed since the types were generated; "
+        "run `python seed/gen_types.py`"
     )
-    in_schema = {part.strip().strip("'") for part in
-                 line.split("(")[-1].split(")")[0].split(",")}
-    assert in_schema == {s.value for s in DeviceStatus}
+
+
+def test_nothing_restates_what_a_device_status_may_be():
+    """The values must have exactly one source, which is the database.
+
+    A second list written out by hand is the thing this whole change removes,
+    and it would go out of date silently.
+    """
+    from typing import get_args
+
+    assert get_args(DeviceStatus), "the generated type carries the values"
+    models = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "systems" / "models.py"
+    ).read_text()
+    for value in get_args(DeviceStatus):
+        if value == "online":
+            continue  # named once, as the value everything compares against
+        assert f'"{value}"' not in models, (
+            f"{value!r} is written out in models.py as well as being generated"
+        )
