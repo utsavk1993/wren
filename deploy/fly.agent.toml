@@ -1,0 +1,40 @@
+# The voice orchestrator.
+#
+# Kept always-on rather than scaled to zero: a caller who waits for a container
+# to start has already hung up, and the embedding model loads on first use.
+
+app = "wren-agent"
+primary_region = "iad"
+
+[build]
+  dockerfile = "../agent/Dockerfile"
+
+[env]
+  LOG_FORMAT = "json"
+  WREN_TRANSPORT = "browser"
+
+[http_service]
+  internal_port = 7860
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    # A call holds its socket open for its whole duration, so the limit is
+    # concurrent callers rather than requests per second.
+    hard_limit = 25
+    soft_limit = 20
+
+[[http_service.checks]]
+  grace_period = "30s"
+  interval = "15s"
+  method = "GET"
+  path = "/health"
+  timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  # The embedding model runs in this process and wants the headroom.
+  memory = "2gb"

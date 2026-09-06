@@ -8,15 +8,28 @@
 -- by the CRM's own record id, so the two systems can be re-pointed or reloaded
 -- independently without the link breaking.
 
+-- Real types rather than a text column with a check attached. A check is not
+-- part of the published schema, so anything generated from it describes these
+-- as ordinary strings and the restriction has to be written out again on the
+-- other side. A type travels with the schema, so the allowed values reach every
+-- client that asks.
+DO $$ BEGIN
+    CREATE TYPE device_status AS ENUM ('online', 'offline', 'low_battery');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE TYPE device_kind AS ENUM (
+        'control_panel', 'door_sensor', 'window_sensor',
+        'motion_sensor', 'camera', 'keypad'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 CREATE TABLE IF NOT EXISTS devices (
     external_id          TEXT PRIMARY KEY,
     customer_external_id TEXT NOT NULL,
     name                 TEXT NOT NULL,
-    device_type          TEXT NOT NULL
-                         CHECK (device_type IN ('control_panel', 'door_sensor', 'window_sensor',
-                                                'motion_sensor', 'camera', 'keypad')),
-    status               TEXT NOT NULL
-                         CHECK (status IN ('online', 'offline', 'low_battery')),
+    device_type          device_kind NOT NULL,
+    status               device_status NOT NULL,
     battery_pct          INTEGER CHECK (battery_pct BETWEEN 0 AND 100),
     last_seen            TIMESTAMPTZ,
     -- Whether a power cycle brings this unit back. Equipment that has failed
@@ -31,7 +44,8 @@ CREATE TABLE IF NOT EXISTS devices (
 CREATE INDEX IF NOT EXISTS devices_customer_idx ON devices (customer_external_id);
 
 -- Reporting on what is currently broken.
-CREATE INDEX IF NOT EXISTS devices_status_idx ON devices (status) WHERE status <> 'online';
+CREATE INDEX IF NOT EXISTS devices_status_idx ON devices (status)
+    WHERE status <> 'online'::device_status;
 
 -- Row level security is on and no policy is defined, on purpose: the key that
 -- ships to a browser can therefore read nothing at all.

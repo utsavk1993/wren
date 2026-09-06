@@ -17,8 +17,10 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- by keyword.
 -- ---------------------------------------------------------------------------
 
--- 1536 dimensions matches text-embedding-3-small. Changing embedding model
--- means changing this width and re-ingesting every article.
+-- The vector width belongs to whichever embedding model is in use, so the table
+-- is built to match it. Changing models means rebuilding this table and
+-- re-ingesting every article, which the ingestion step does when it notices the
+-- width no longer agrees.
 CREATE TABLE IF NOT EXISTS kb_chunks (
     id            BIGSERIAL PRIMARY KEY,
     article_slug  TEXT NOT NULL,
@@ -26,7 +28,7 @@ CREATE TABLE IF NOT EXISTS kb_chunks (
     device_type   TEXT,
     chunk_index   INTEGER NOT NULL,
     content       TEXT NOT NULL,
-    embedding     VECTOR(1536),
+    embedding     VECTOR(384),
     UNIQUE (article_slug, chunk_index)
 );
 
@@ -50,9 +52,20 @@ CREATE TABLE IF NOT EXISTS calls (
     outcome              TEXT,
     escalated            BOOLEAN NOT NULL DEFAULT FALSE,
     escalation_reason    TEXT,
+    -- What was said, what was reached for, what refused, and how long each part
+    -- took. Written as the call runs rather than at the end, so a call that
+    -- drops still leaves behind what it had reached.
     transcript           JSONB NOT NULL DEFAULT '[]'::jsonb,
+    tool_calls           JSONB NOT NULL DEFAULT '[]'::jsonb,
+    refusals             JSONB NOT NULL DEFAULT '[]'::jsonb,
+    timings              JSONB NOT NULL DEFAULT '[]'::jsonb,
+    verified             BOOLEAN NOT NULL DEFAULT FALSE,
     started_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     ended_at             TIMESTAMPTZ
 );
+
+-- The list is always read newest first.
+CREATE INDEX IF NOT EXISTS calls_started_idx ON calls (started_at DESC);
 
 CREATE INDEX IF NOT EXISTS calls_customer_idx ON calls (customer_external_id);

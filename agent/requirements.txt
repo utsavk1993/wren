@@ -6,3 +6,17 @@ pydantic==2.13.5
 pydantic-settings==2.13.1
 python-dotenv==1.1.1
 httpx==0.28.1
+
+# Knowledge base retrieval.
+fastembed==0.8.0
+psycopg[binary]==3.3.5
+pgvector==0.5.0
+
+# The model that decides what to say.
+anthropic==1.4.0
+
+# Carrying a call over a websocket.
+websockets==17.1
+
+# Tracing, only used when credentials are configured.
+langfuse==3.9.0

@@ -1,0 +1,207 @@
+:root {
+  --ink: #1b1b1f;
+  --muted: #6b6b76;
+  --line: #e3e3e8;
+  --ground: #fbfbfd;
+  --caller: #eef1f6;
+  --agent: #ffffff;
+  --accent: #2f5d50;
+  --danger: #a13c33;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #ececed;
+    --muted: #9a9aa4;
+    --line: #303038;
+    --ground: #17171b;
+    --caller: #23232a;
+    --agent: #1e1e24;
+    --accent: #7fb3a1;
+    --danger: #d98a80;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.app {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 1rem;
+}
+
+h1 { margin: 0; font-size: 1.35rem; letter-spacing: -0.01em; }
+.sub { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.85rem; }
+
+.status { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.listening { background: var(--accent); }
+.dot.thinking { background: #c99a3f; animation: pulse 1.1s ease-in-out infinite; }
+.dot.speaking { background: var(--accent); animation: pulse 0.8s ease-in-out infinite; }
+.dot.ended { background: var(--danger); }
+
+@keyframes pulse { 50% { opacity: 0.3; } }
+
+.transcript { flex: 1; padding: 1.25rem 0; overflow-y: auto; }
+.empty { color: var(--muted); }
+
+.line { margin-bottom: 0.9rem; }
+.line .who { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.line p {
+  margin: 0.2rem 0 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--line);
+  background: var(--agent);
+  white-space: pre-wrap;
+}
+.line.caller p { background: var(--caller); }
+/* Filler is not an answer, so it does not look like one. */
+.line.filler p { color: var(--muted); font-style: italic; background: transparent; border-style: dashed; }
+
+.timing { margin: 0; color: var(--muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.error { color: var(--danger); }
+
+.composer { display: flex; gap: 0.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+input {
+  flex: 1;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--agent);
+  color: inherit;
+  font: inherit;
+}
+button {
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--agent);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.45; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--ground); font-weight: 600; }
+button.hangup { color: var(--danger); }
+
+/* ---- moving between the live call and the history ---- */
+
+.tabs { display: flex; gap: 0.25rem; }
+.tabs button { padding: 0.35rem 0.75rem; font-size: 0.85rem; background: transparent; border-color: transparent; }
+.tabs button.on { background: var(--agent); border-color: var(--line); font-weight: 600; }
+
+.status { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem;
+          color: var(--muted); padding-top: 0.75rem; }
+
+/* ---- the list of past calls ---- */
+
+.listhead { display: flex; justify-content: space-between; align-items: center;
+            padding: 1rem 0 0.5rem; color: var(--muted); font-size: 0.85rem; }
+
+table.calls { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+table.calls th { text-align: left; font-weight: 500; color: var(--muted);
+                 font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+                 padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--line); }
+table.calls td { padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--line); }
+table.calls tbody tr { cursor: pointer; }
+table.calls tbody tr:hover { background: var(--caller); }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; }
+.muted { color: var(--muted); }
+
+.tag { display: inline-block; padding: 0.1rem 0.4rem; margin-right: 0.3rem;
+       border-radius: 0.3rem; font-size: 0.72rem; border: 1px solid var(--line); }
+.tag.ok { color: var(--accent); }
+.tag.escalated { color: #a2762f; }
+.tag.refused { color: var(--danger); }
+.tag.failed { color: var(--danger); }
+.tag.live { color: #a2762f; }
+
+/* ---- one call, in full ---- */
+
+.back { background: transparent; border-color: transparent; padding: 0.5rem 0;
+        color: var(--muted); }
+.detail-head { padding-bottom: 0.75rem; border-bottom: 1px solid var(--line); }
+.detail-head h2 { margin: 0.25rem 0; font-size: 1rem; }
+.facts { display: flex; flex-wrap: wrap; gap: 0.75rem; color: var(--muted);
+         font-size: 0.82rem; align-items: center; }
+
+.refusal-summary { display: flex; align-items: center; gap: 0.4rem;
+                   padding: 0.6rem 0; flex-wrap: wrap; }
+.label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+         color: var(--muted); }
+
+.trace { padding: 0.75rem 0 2rem; }
+.trace-turn { margin-bottom: 0.5rem; padding-left: 0.75rem;
+              border-left: 2px solid var(--line); }
+.trace-turn.caller { border-left-color: var(--accent); }
+
+/* ---- what happened underneath a turn ---- */
+
+.tool { margin: 0.35rem 0 0.35rem 0.5rem; border: 1px solid var(--line);
+        border-radius: 0.4rem; background: var(--agent); }
+.tool.refused { border-color: var(--danger); }
+.tool.failed { border-color: var(--danger); border-style: dashed; }
+.tool-head { display: flex; align-items: center; gap: 0.5rem; width: 100%;
+             padding: 0.4rem 0.6rem; background: transparent; border: none;
+             text-align: left; font-size: 0.82rem; }
+.chev { color: var(--muted); }
+.tool-head code { font-size: 0.82rem; }
+.tool-ms { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tool-body { padding: 0 0.6rem 0.6rem 1.6rem; display: grid; gap: 0.5rem; }
+.tool-body pre { margin: 0.15rem 0 0; padding: 0.5rem; overflow-x: auto;
+                 background: var(--caller); border-radius: 0.3rem; font-size: 0.78rem; }
+.guidance { margin: 0.15rem 0 0; font-size: 0.82rem; color: var(--muted); }
+
+/* ---- where the time went ---- */
+
+.timing-block { margin: 0.4rem 0 0.75rem 0.5rem; padding: 0.5rem 0.6rem;
+                border: 1px solid var(--line); border-radius: 0.4rem; }
+.timing-head { display: flex; gap: 0.6rem; align-items: baseline;
+               font-size: 0.85rem; margin-bottom: 0.4rem; }
+.stage { display: grid; grid-template-columns: 13rem 1fr 7rem; gap: 0.5rem;
+         align-items: center; font-size: 0.78rem; padding: 0.1rem 0; }
+.stage-name { color: var(--muted); }
+/* The bar runs to three times the budget, so the mark sits a third along and
+   anything past it is over. */
+.bar { position: relative; height: 6px; background: var(--caller);
+       border-radius: 3px; overflow: hidden; }
+.fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.fill.over { background: var(--danger); }
+.budget-mark { position: absolute; top: 0; bottom: 0; width: 1px;
+               background: var(--muted); opacity: 0.6; }
+.stage-ms { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.stage-ms.over { color: var(--danger); }
+
+@media (max-width: 40rem) {
+  .stage { grid-template-columns: 1fr; gap: 0.15rem; }
+  .bar { display: none; }
+  table.calls th:nth-child(4), table.calls td:nth-child(4) { display: none; }
+}
+
+.following { color: var(--accent); }
+.crash { white-space: pre-wrap; font-size: 0.75rem; background: var(--caller);
+         padding: 0.75rem; border-radius: 0.4rem; overflow-x: auto; }
+
+/* What is being picked up, before the turn is judged finished. */
+.line.hearing p { opacity: 0.55; border-style: dashed; }
+.speaking-hint { flex: 1; padding: 0.6rem 0; color: var(--muted); font-size: 0.9rem; }

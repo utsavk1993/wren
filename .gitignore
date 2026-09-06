@@ -32,5 +32,6 @@ pgdata/
 # Eval artifacts
 eval-report.json
 
-# Working docs, added to the repo later
-docs/
+# The specification is kept out of the repo; everything else written for
+# readers belongs in it.
+docs/PRD.md

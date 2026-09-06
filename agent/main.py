@@ -33,14 +33,83 @@ reviewable, so the cascade is the better trade here.
 
 import logging
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 
-logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+import observability
+import history
+from call import CallHandler, capabilities, warm_up
 
-app = FastAPI(title="Wren Agent", version="0.1.0")
+observability.configure()
+log = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    ready = capabilities()
+    # Pay the cold costs now rather than making the first caller wait through
+    # them: a token from the customer system, and the embedding model loading.
+    await warm_up()
+    log.info("agent ready: %s", {**ready, "tracing": observability.tracer().enabled})
+    yield
+
+
+app = FastAPI(title="Wren Agent", version="0.1.0", lifespan=lifespan)
+
+# The browser client is served from a different port in development and a
+# different host once deployed.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("WREN_ALLOWED_ORIGINS", "*").split(","),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "agent"}
+
+
+@app.get("/capabilities")
+def read_capabilities() -> dict[str, object]:
+    """What this deployment can actually do.
+
+    The client needs to know whether there is speech at the other end before it
+    asks for a microphone, so that a deployment without speech credentials
+    offers typing instead of failing silently.
+    """
+    return capabilities()
+
+
+@app.get("/calls")
+def list_calls(limit: int = 50) -> list[dict]:
+    """Recent calls, newest first."""
+    return [dict(row) for row in history.list_calls(limit=limit)]
+
+
+@app.get("/calls/{call_id}")
+def read_call(call_id: str) -> dict:
+    """One call in full: every turn, every tool call, every timing."""
+    found = history.get_call(call_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="no such call")
+    return dict(found)
+
+
+@app.websocket("/call")
+async def call(websocket: WebSocket) -> None:
+    """One call, for as long as the caller stays connected."""
+    await websocket.accept()
+    handler = CallHandler(websocket)
+    try:
+        await handler.run()
+    except WebSocketDisconnect:
+        log.info("caller hung up: %s", handler.call_id)
+    except Exception:
+        log.exception("call %s failed", handler.call_id)
+    finally:
+        await handler.aclose()
