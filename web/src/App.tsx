@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
+import { CallDetail } from "./components/CallDetail";
+import { CallList } from "./components/CallList";
 import { useCall } from "./hooks/useCall";
+import { useCallDetail, useCallList } from "./hooks/useCalls";
 import type { CallState } from "./types";
 
 const STATE_LABEL: Record<CallState, string> = {
@@ -12,15 +15,15 @@ const STATE_LABEL: Record<CallState, string> = {
   ended: "Call ended",
 };
 
-export function App() {
+type Tab = "call" | "history";
+
+function LiveCall() {
   const { state, lines, timing, capabilities, error, start, hangUp, say } = useCall();
   const [draft, setDraft] = useState("");
-  const transcriptEnd = useRef<HTMLDivElement>(null);
+  const end = useRef<HTMLDivElement>(null);
   const onCall = state !== "idle" && state !== "ended";
 
-  useEffect(() => {
-    transcriptEnd.current?.scrollIntoView({ behavior: "smooth" });
-  }, [lines]);
+  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth" }), [lines]);
 
   const send = (event: React.FormEvent) => {
     event.preventDefault();
@@ -30,22 +33,14 @@ export function App() {
     setDraft("");
   };
 
-  // Speech is optional. Without it the call still works by typing, which is
-  // said plainly rather than leaving a dead microphone button on screen.
   const canSpeak = capabilities?.speech_in && capabilities?.speech_out;
 
   return (
-    <div className="app">
-      <header>
-        <div>
-          <h1>Wren</h1>
-          <p className="sub">Home security support</p>
-        </div>
-        <div className="status">
-          <span className={`dot ${state}`} aria-hidden />
-          <span>{STATE_LABEL[state]}</span>
-        </div>
-      </header>
+    <>
+      <div className="status">
+        <span className={`dot ${state}`} aria-hidden />
+        <span>{STATE_LABEL[state]}</span>
+      </div>
 
       {error && <p className="error">{error}</p>}
 
@@ -54,7 +49,7 @@ export function App() {
           <p className="empty">
             Start a call to talk to the agent.
             {capabilities && !canSpeak && (
-              <> Speech isn't configured on this deployment, so the call is typed.</>
+              <> Speech isn't configured here, so the call is typed.</>
             )}
           </p>
         )}
@@ -67,13 +62,13 @@ export function App() {
             <p>{line.text}</p>
           </div>
         ))}
-        <div ref={transcriptEnd} />
+        <div ref={end} />
       </main>
 
       {timing && (
         <p className="timing">
           {timing.ms_total} ms
-          {timing.llm_rounds ? ` · ${timing.llm_rounds} model rounds` : ""}
+          {timing.llm_rounds ? ` · ${timing.llm_rounds} model round trips` : ""}
           {timing.over_budget ? ` · over budget: ${timing.over_budget}` : ""}
         </p>
       )}
@@ -100,6 +95,60 @@ export function App() {
           </>
         )}
       </form>
+    </>
+  );
+}
+
+function History() {
+  const [openId, setOpenId] = useState<string | null>(null);
+  // Both keep following, so a call that is happening right now fills in on
+  // screen rather than needing to be asked for again.
+  const { calls, error, refresh } = useCallList();
+  const { call, error: detailError } = useCallDetail(openId);
+
+  if (openId) {
+    if (detailError) return <p className="error">{detailError}</p>;
+    if (call) return <CallDetail call={call} onBack={() => setOpenId(null)} />;
+    return <p className="empty">Loading call…</p>;
+  }
+
+  return (
+    <>
+      {error && <p className="error">Couldn't load calls: {error}</p>}
+      <CallList calls={calls} onOpen={setOpenId} onRefresh={refresh} />
+    </>
+  );
+}
+
+export function App() {
+  const [tab, setTab] = useState<Tab>("call");
+
+  return (
+    <div className="app">
+      <header>
+        <div>
+          <h1>Wren</h1>
+          <p className="sub">Home security support</p>
+        </div>
+        <nav className="tabs">
+          <button
+            type="button"
+            className={tab === "call" ? "on" : ""}
+            onClick={() => setTab("call")}
+          >
+            Call
+          </button>
+          <button
+            type="button"
+            className={tab === "history" ? "on" : ""}
+            onClick={() => setTab("history")}
+          >
+            Past calls
+          </button>
+        </nav>
+      </header>
+
+      {tab === "call" ? <LiveCall /> : <History />}
     </div>
   );
 }

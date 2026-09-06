@@ -36,11 +36,12 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 import observability
-from call import CallHandler, capabilities
+import history
+from call import CallHandler, capabilities, warm_up
 
 observability.configure()
 log = logging.getLogger(__name__)
@@ -49,6 +50,9 @@ log = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ready = capabilities()
+    # Pay the cold costs now rather than making the first caller wait through
+    # them: a token from the customer system, and the embedding model loading.
+    await warm_up()
     log.info("agent ready: %s", {**ready, "tracing": observability.tracer().enabled})
     yield
 
@@ -79,6 +83,21 @@ def read_capabilities() -> dict[str, object]:
     offers typing instead of failing silently.
     """
     return capabilities()
+
+
+@app.get("/calls")
+def list_calls(limit: int = 50) -> list[dict]:
+    """Recent calls, newest first."""
+    return [dict(row) for row in history.list_calls(limit=limit)]
+
+
+@app.get("/calls/{call_id}")
+def read_call(call_id: str) -> dict:
+    """One call in full: every turn, every tool call, every timing."""
+    found = history.get_call(call_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="no such call")
+    return dict(found)
 
 
 @app.websocket("/call")

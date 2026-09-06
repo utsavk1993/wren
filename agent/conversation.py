@@ -7,11 +7,13 @@ before and after the model speaks, and keeps the record of what happened.
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+import history
 import policy
 from llm import LanguageModel, Reply
 from observability import StageTimer, log_turn, tracer
@@ -102,9 +104,19 @@ class Conversation:
             )
             results = []
             for call in reply.tool_calls:
+                started = time.perf_counter()
                 with timer.measure(_stage_for(call.name)):
                     outcome = await self.dispatcher.run(call, self.state)
-                self.record.tool_calls.append({"name": call.name, "result": outcome})
+                self.record.tool_calls.append({
+                    "name": call.name,
+                    # What it was asked for matters as much as what came back.
+                    # A lookup that found nothing reads very differently once
+                    # you can see it was asked about a garage door opener.
+                    "arguments": call.arguments,
+                    "result": outcome,
+                    "ms": round((time.perf_counter() - started) * 1000, 1),
+                    "turn": len([t for t in self.record.turns if t.speaker == "caller"]),
+                })
                 if "refused" in outcome:
                     self.record.denials.append(outcome["refused"])
                 results.append({
@@ -156,6 +168,20 @@ class Conversation:
             )
         return text
 
+    def _remember(self, ended: bool = False) -> None:
+        customer = self.state.customer
+        history.save(
+            self.record,
+            customer_external_id=customer.external_id if customer else None,
+            verified=self.state.verified,
+            escalated=self.state.caller_requested_human or bool(self.state.case_number),
+            ended=ended,
+        )
+
+    def ended(self) -> None:
+        """Mark the call finished. Safe to call more than once."""
+        self._remember(ended=True)
+
     def _respond(self, text: str) -> str:
         timer = getattr(self, "_timer", None)
         timings: dict[str, Any] = {}
@@ -183,6 +209,7 @@ class Conversation:
             **timings,
         )
         tracer().turn(self.record.id, said, text, **timings)
+        self._remember()
         self.record.turns.append(Turn("agent", text))
         self._messages.append({"role": "assistant", "content": text})
         return text
