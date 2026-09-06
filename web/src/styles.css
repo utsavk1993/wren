@@ -1,0 +1,104 @@
+:root {
+  --ink: #1b1b1f;
+  --muted: #6b6b76;
+  --line: #e3e3e8;
+  --ground: #fbfbfd;
+  --caller: #eef1f6;
+  --agent: #ffffff;
+  --accent: #2f5d50;
+  --danger: #a13c33;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #ececed;
+    --muted: #9a9aa4;
+    --line: #303038;
+    --ground: #17171b;
+    --caller: #23232a;
+    --agent: #1e1e24;
+    --accent: #7fb3a1;
+    --danger: #d98a80;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.app {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 1rem;
+}
+
+h1 { margin: 0; font-size: 1.35rem; letter-spacing: -0.01em; }
+.sub { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.85rem; }
+
+.status { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.listening { background: var(--accent); }
+.dot.thinking { background: #c99a3f; animation: pulse 1.1s ease-in-out infinite; }
+.dot.speaking { background: var(--accent); animation: pulse 0.8s ease-in-out infinite; }
+.dot.ended { background: var(--danger); }
+
+@keyframes pulse { 50% { opacity: 0.3; } }
+
+.transcript { flex: 1; padding: 1.25rem 0; overflow-y: auto; }
+.empty { color: var(--muted); }
+
+.line { margin-bottom: 0.9rem; }
+.line .who { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.line p {
+  margin: 0.2rem 0 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--line);
+  background: var(--agent);
+  white-space: pre-wrap;
+}
+.line.caller p { background: var(--caller); }
+/* Filler is not an answer, so it does not look like one. */
+.line.filler p { color: var(--muted); font-style: italic; background: transparent; border-style: dashed; }
+
+.timing { margin: 0; color: var(--muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.error { color: var(--danger); }
+
+.composer { display: flex; gap: 0.5rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+input {
+  flex: 1;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--agent);
+  color: inherit;
+  font: inherit;
+}
+button {
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--agent);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.45; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--ground); font-weight: 600; }
+button.hangup { color: var(--danger); }
