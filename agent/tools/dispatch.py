@@ -11,6 +11,7 @@ it should be doing instead, rather than being cut off mid-call.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -97,14 +98,32 @@ class Dispatcher:
         state.verified = ok
         if ok:
             customer = state.customer
-            history = await self.salesforce.get_case_history(customer.external_id)
+            # Everything the rest of the call will need is fetched now, at the
+            # one moment the caller is already expecting a pause, and fetched
+            # together rather than one after another. Each separate lookup later
+            # would cost another round trip to the model, and the caller waits
+            # through every one of them.
+            history, devices = await asyncio.gather(
+                self.salesforce.get_case_history(customer.external_id),
+                self._devices_or_empty(customer.external_id),
+            )
             state.history = history
+            state.devices = devices
             return {
                 "verified": True,
                 "name": customer.first_name,
                 "plan": customer.plan,
                 "account_status": customer.status.value,
                 "monitored": customer.status.is_monitored,
+                "equipment": [
+                    {
+                        "id": d.external_id,
+                        "name": d.name,
+                        "type": d.device_type.replace("_", " "),
+                        "reporting": d.status is DeviceStatus.ONLINE,
+                    }
+                    for d in devices
+                ] if customer.status.is_monitored else [],
                 "guidance": (
                     "Greet them by name and ask what is wrong."
                     if customer.status.is_monitored
@@ -131,6 +150,18 @@ class Dispatcher:
             # Saying what was wrong with a guess narrows the next one.
             "do_not_say": "anything about how close the answer was",
         }
+
+    async def _devices_or_empty(self, customer_external_id: str):
+        """Equipment, or nothing if the platform is not answering.
+
+        Failing here must not sink the whole verification step: knowing who the
+        caller is still lets the call continue.
+        """
+        try:
+            return await self.telemetry.get_devices(customer_external_id)
+        except TelemetryError as exc:
+            log.warning("could not prefetch equipment: %s", exc)
+            return []
 
     # ---- equipment ----
 
