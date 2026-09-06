@@ -33,14 +33,63 @@ reviewable, so the cascade is the better trade here.
 
 import logging
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+
+from call import CallHandler, capabilities
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+log = logging.getLogger(__name__)
 
-app = FastAPI(title="Wren Agent", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    ready = capabilities()
+    log.info("agent ready: %s", ready)
+    yield
+
+
+app = FastAPI(title="Wren Agent", version="0.1.0", lifespan=lifespan)
+
+# The browser client is served from a different port in development and a
+# different host once deployed.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("WREN_ALLOWED_ORIGINS", "*").split(","),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "agent"}
+
+
+@app.get("/capabilities")
+def read_capabilities() -> dict[str, object]:
+    """What this deployment can actually do.
+
+    The client needs to know whether there is speech at the other end before it
+    asks for a microphone, so that a deployment without speech credentials
+    offers typing instead of failing silently.
+    """
+    return capabilities()
+
+
+@app.websocket("/call")
+async def call(websocket: WebSocket) -> None:
+    """One call, for as long as the caller stays connected."""
+    await websocket.accept()
+    handler = CallHandler(websocket)
+    try:
+        await handler.run()
+    except WebSocketDisconnect:
+        log.info("caller hung up: %s", handler.call_id)
+    except Exception:
+        log.exception("call %s failed", handler.call_id)
+    finally:
+        await handler.aclose()
