@@ -32,7 +32,7 @@ fly secrets set --app wren-agent \
   ANTHROPIC_API_KEY=... \
   SALESFORCE_INSTANCE_URL=... SALESFORCE_CLIENT_ID=... SALESFORCE_CLIENT_SECRET=... \
   SUPABASE_URL=... SUPABASE_SECRET_KEY=... \
-  DEEPGRAM_API_KEY=... CARTESIA_API_KEY=... CARTESIA_VOICE_ID=... \
+  DEEPGRAM_API_KEY=... \
   DATABASE_URL=...
 
 fly deploy --config deploy/fly.api.toml

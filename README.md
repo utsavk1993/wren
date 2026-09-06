@@ -18,9 +18,9 @@ waits for a complete sentence upstream.
 Browser mic
   -> WebRTC audio in
     -> Voice activity detection + turn detection
-      -> Speech-to-Text  (Deepgram, streaming)
+      -> Speech-to-Text  (Deepgram Nova, streaming)
         -> Orchestrator  (Claude + retrieval + tools + guardrails)
-          -> Text-to-Speech  (Cartesia, streaming)
+          -> Text-to-Speech  (Deepgram Aura, streaming)
             -> WebRTC audio out
               -> Browser speaker
 ```
@@ -28,7 +28,7 @@ Browser mic
 **Speech-to-Text (STT)** transcribes what the caller says. The **orchestrator**
 decides how to respond, retrieving troubleshooting steps from the knowledge base
 and calling out to the customer and equipment systems. **Text-to-Speech (TTS)**
-turns the reply back into audio.
+turns the reply back into audio. Both come from the same service.
 
 Each stage streams into the next instead of waiting for it to finish, so speech
 synthesis starts on the first complete sentence while the model is still
