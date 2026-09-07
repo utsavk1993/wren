@@ -136,6 +136,17 @@ export function useCall() {
     socket.current?.send(JSON.stringify({ type: "interrupt" }));
   }, []);
 
+  /** Whoever is talking, as a number between nothing and one.
+   *
+   * Read on demand rather than kept in state. It changes every frame, and
+   * putting it in state would re-render the page sixty times a second to move
+   * a ring.
+   */
+  const level = useCallback(
+    () => Math.max(playback.current.level, microphone.current.level),
+    [],
+  );
+
   useEffect(() => {
     // Closing the socket and stopping any sound if the component goes away, so
     // a call does not carry on behind a page nobody is looking at.
@@ -159,5 +170,6 @@ export function useCall() {
     hangUp,
     say,
     interrupt,
+    level,
   };
 }

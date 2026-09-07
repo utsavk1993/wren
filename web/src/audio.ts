@@ -14,6 +14,7 @@ const SAMPLE_RATE_HZ = 16000;
 
 export class Playback {
   private context: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
   /** When the last queued piece finishes, so the next can start there. */
   private playingUntil = 0;
   private sources = new Set<AudioBufferSourceNode>();
@@ -22,6 +23,11 @@ export class Playback {
   start(): void {
     if (!this.context) {
       this.context = new AudioContext({ sampleRate: SAMPLE_RATE_HZ });
+      // Everything is routed through here so the page can show the agent's
+      // voice moving. On a call there is nothing else to look at.
+      this.analyser = this.context.createAnalyser();
+      this.analyser.fftSize = 256;
+      this.analyser.connect(this.context.destination);
     }
     void this.context.resume();
     this.playingUntil = this.context.currentTime;
@@ -40,7 +46,7 @@ export class Playback {
 
     const source = this.context.createBufferSource();
     source.buffer = buffer;
-    source.connect(this.context.destination);
+    source.connect(this.analyser ?? this.context.destination);
 
     // Start where the last piece ends, or now if nothing is playing. Without
     // this every piece would begin immediately and they would overlap.
@@ -73,5 +79,15 @@ export class Playback {
 
   get speaking(): boolean {
     return this.sources.size > 0;
+  }
+
+  /** How loud the agent is right now, from nothing to one. */
+  get level(): number {
+    if (!this.analyser || this.sources.size === 0) return 0;
+    const samples = new Uint8Array(this.analyser.frequencyBinCount);
+    this.analyser.getByteTimeDomainData(samples);
+    let peak = 0;
+    for (const sample of samples) peak = Math.max(peak, Math.abs(sample - 128));
+    return Math.min(1, peak / 90);
   }
 }
