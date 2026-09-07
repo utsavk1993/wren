@@ -280,3 +280,90 @@ table.calls tbody tr:hover { background: var(--caller); }
   .ring { transition: none; }
   .callbutton.thinking .dial { animation: none; }
 }
+
+/* ---- the call, with something to read beside it ---- */
+
+.app { max-width: 62rem; }
+
+.with-scripts {
+  display: grid;
+  grid-template-columns: 1fr 20rem;
+  gap: 1.5rem;
+  align-items: start;
+}
+.call-column { display: flex; flex-direction: column; min-width: 0; }
+
+.scripts {
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  padding: 0.9rem;
+  background: var(--agent);
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+.scripts h2 { margin: 0; font-size: 0.95rem; }
+.scripts-intro { margin: 0.2rem 0 0.8rem; color: var(--muted); font-size: 0.78rem; }
+
+.script { border-top: 1px solid var(--line); }
+.script:first-of-type { border-top: none; }
+.script-head {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0.55rem 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+.script-body { padding: 0 0 0.8rem 0.9rem; }
+.script-why { margin: 0 0 0.6rem; color: var(--muted); font-size: 0.78rem; }
+
+.credentials { display: flex; gap: 1rem; margin: 0 0 0.7rem; }
+.credentials dt {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.credentials dd { margin: 0.1rem 0 0; }
+/* The numbers are the thing a tester needs most, so they are the thing that
+   copies with one press. */
+.credentials dd button {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.45rem;
+  cursor: pointer;
+}
+
+.lines { margin: 0.25rem 0 0.8rem; padding-left: 1.1rem; font-size: 0.82rem; }
+.lines li { margin-bottom: 0.3rem; display: flex; gap: 0.4rem; align-items: baseline; }
+.lines li span { flex: 1; }
+.sayit {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.7rem;
+  padding: 0 0.2rem;
+  cursor: pointer;
+  opacity: 0;
+}
+.lines li:hover .sayit { opacity: 1; }
+
+.expect { margin: 0.25rem 0 0; padding-left: 1.1rem; font-size: 0.8rem; color: var(--muted); }
+.expect li { margin-bottom: 0.25rem; }
+
+.copied {
+  margin: 0.6rem 0 0;
+  font-size: 0.75rem;
+  color: var(--accent);
+}
+
+@media (max-width: 56rem) {
+  .with-scripts { grid-template-columns: 1fr; }
+  .scripts { position: static; max-height: none; order: -1; }
+}
