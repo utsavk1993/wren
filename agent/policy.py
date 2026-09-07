@@ -44,6 +44,7 @@ class Denial(str, Enum):
     STEPS_EXHAUSTED = "steps_exhausted"
     CALLER_ASKED_FOR_A_PERSON = "caller_asked_for_a_person"
     EMERGENCY = "emergency"
+    NOTHING_CONCLUDED = "nothing_concluded"
 
 
 @dataclass
@@ -77,7 +78,14 @@ class CallState:
     caller_requested_human: bool = False
     emergency_declared: bool = False
     caller_said_goodbye: bool = False
+    # Set by the equipment reporting again, never by the caller saying they did
+    # the step. Whether a reset worked is not something they can tell.
+    fault_resolved: bool = False
     case_number: str | None = None
+    # Set only through may_end_call, so the reason a call ended is always one
+    # of the reasons a call is allowed to end.
+    call_should_end: bool = False
+    ending_reason: str | None = None
 
     @property
     def verification_exhausted(self) -> bool:
@@ -307,6 +315,36 @@ def find_leaked_passcode(reply: str, passcode: str | None) -> bool:
         return True
     # Read out one digit at a time, the way a person says a code aloud.
     return "".join(digits_in_reply).find(passcode) >= 0
+
+
+def may_end_call(state: CallState) -> Ruling:
+    """Whether the call has actually reached a conclusion.
+
+    The model decides when a conversation is over, because it is the only part
+    of this system that knows whether one is. What it does not get to do is
+    hang up as a way out of a question it cannot answer, so the reasons a call
+    may end are listed here and checked rather than trusted.
+
+    Every one of these is somewhere the caller has been told what happens next:
+    the equipment is working, a case exists, a person is coming, or they said
+    goodbye themselves.
+    """
+    if state.caller_said_goodbye:
+        return ALLOWED
+    if state.emergency_declared:
+        return ALLOWED
+    if state.fault_resolved:
+        return ALLOWED
+    if state.case_number:
+        return ALLOWED
+    if state.caller_requested_human:
+        return ALLOWED
+    return _denied(
+        Denial.NOTHING_CONCLUDED,
+        "Nothing has been settled yet, so the call is not over. Either fix the "
+        "problem, open a case, or get them a person. Do not hang up on someone "
+        "whose question you have not answered.",
+    )
 
 
 def should_escalate(state: CallState) -> Ruling:

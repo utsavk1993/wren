@@ -106,7 +106,10 @@ TOOLS: list[dict[str, Any]] = [
         "name": "open_case",
         "description": (
             "Open a support case. Returns a case number to read back to the caller. "
-            "Use when the problem cannot be fixed on this call."
+            "Use when the problem cannot be fixed on this call. "
+            "Say what you are about to do before calling this — that you cannot "
+            "sort it on the phone and will raise a case — so the number does not "
+            "arrive out of nowhere."
         ),
         "strict": True,
         "input_schema": {
@@ -144,6 +147,29 @@ TOOLS: list[dict[str, Any]] = [
                 "case_number": {
                     "type": "string",
                     "description": "An existing case number, if one has been opened.",
+                },
+            },
+            "required": ["reason"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "end_call",
+        "description": (
+            "End the call. Use when the conversation has actually finished: the "
+            "equipment is reporting again and you have confirmed it, or a case is "
+            "open and you have told them someone will be in touch, or they have "
+            "said goodbye. Say your closing line in the same reply. "
+            "Never use this to get out of a question you cannot answer — open a "
+            "case or hand them to a person instead."
+        ),
+        "strict": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "description": "Why the call is finished, in a few words.",
                 },
             },
             "required": ["reason"],
