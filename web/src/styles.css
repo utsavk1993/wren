@@ -367,3 +367,9 @@ table.calls tbody tr:hover { background: var(--caller); }
   .with-scripts { grid-template-columns: 1fr; }
   .scripts { position: static; max-height: none; order: -1; }
 }
+
+.passphrase {
+  width: 12rem;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}

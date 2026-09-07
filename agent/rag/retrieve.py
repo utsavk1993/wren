@@ -14,10 +14,8 @@ import os
 from dataclasses import dataclass
 
 import numpy as np
-import psycopg
-from pgvector.psycopg import register_vector
-from psycopg.rows import dict_row
 
+from .connection import connect
 from .embeddings import get_embedder
 
 log = logging.getLogger(__name__)
@@ -44,13 +42,8 @@ class Passage:
     similarity: float
 
 
-def _database_url() -> str:
-    return os.getenv("DATABASE_URL", "postgresql://wren:wren@db:5432/wren")
-
-
 class Retriever:
     def __init__(self, database_url: str | None = None) -> None:
-        self._database_url = database_url or _database_url()
         self._embedder = get_embedder()
 
     async def aclose(self) -> None:
@@ -95,8 +88,7 @@ class Retriever:
         sql += " ORDER BY embedding <=> %(embedding)s LIMIT %(top_k)s"
 
         def run() -> list[dict]:
-            with psycopg.connect(self._database_url, row_factory=dict_row) as conn:
-                register_vector(conn)
+            with connect(rows_as_dicts=True) as conn:
                 return conn.execute(sql, params).fetchall()
 
         rows = await asyncio.to_thread(run)

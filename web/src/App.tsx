@@ -20,9 +20,12 @@ const STATE_LABEL: Record<CallState, string> = {
 type Tab = "call" | "history";
 
 function LiveCall() {
-  const { state, lines, hearing, timing, capabilities, error, start, hangUp, say, level } =
-    useCall();
+  const {
+    state, lines, hearing, timing, capabilities, error, refused, access,
+    start, hangUp, say, level,
+  } = useCall();
   const [draft, setDraft] = useState("");
+  const [passphrase, setPassphrase] = useState("");
   // Speaking is the point. Typing stays for when there is no microphone, or
   // for working on the conversation without talking out loud.
   const [typing, setTyping] = useState(false);
@@ -49,8 +52,31 @@ function LiveCall() {
   return (
     <>
       <div className="stage">
-        <CallButton state={state} level={level} onStart={start} onEnd={hangUp} />
+        <CallButton
+          state={state}
+          level={level}
+          onStart={() => start(access?.guarded ? passphrase : undefined)}
+          onEnd={hangUp}
+        />
         <p className={`stage-state ${state}`}>{STATE_LABEL[state]}</p>
+        {!onCall && access?.guarded && (
+          <input
+            className="passphrase"
+            value={passphrase}
+            onChange={(e) => setPassphrase(e.target.value)}
+            placeholder="Passphrase"
+            aria-label="Passphrase"
+          />
+        )}
+        {refused && <p className="error">{refused}</p>}
+        {state === "connecting" && (
+          // A host that sleeps takes about a minute to come back, and a button
+          // that does nothing for that long reads as broken.
+          <p className="stage-hint">
+            Connecting. If this has been quiet for a while it may take up to a
+            minute to wake up.
+          </p>
+        )}
         {!onCall && (
           <p className="stage-hint">
             {canSpeak

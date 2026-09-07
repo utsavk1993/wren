@@ -11,17 +11,12 @@ import logging
 import os
 
 import numpy as np
-import psycopg
-from pgvector.psycopg import register_vector
 
 from .chunking import load_chunks
+from .connection import connect
 from .embeddings import get_embedder
 
 log = logging.getLogger(__name__)
-
-
-def _database_url() -> str:
-    return os.getenv("DATABASE_URL", "postgresql://wren:wren@db:5432/wren")
 
 
 async def ingest() -> dict[str, int]:
@@ -42,8 +37,7 @@ async def ingest() -> dict[str, int]:
             f"{embedder.dimensions}; the table needs rebuilding for this model"
         )
 
-    with psycopg.connect(_database_url()) as conn:
-        register_vector(conn)
+    with connect() as conn:
         with conn.cursor() as cur:
             # Replacing wholesale rather than upserting: an article that loses a
             # section would otherwise keep the old text in the index, and it

@@ -30,12 +30,18 @@ export function useCall() {
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hearing, setHearing] = useState("");
+  const [refused, setRefused] = useState<string | null>(null);
+  const [access, setAccess] = useState<{ guarded: boolean } | null>(null);
 
   useEffect(() => {
     fetch(`${AGENT_URL}/capabilities`)
       .then((r) => r.json())
       .then(setCapabilities)
       .catch(() => setError("Can't reach the agent."));
+    fetch(`${AGENT_URL}/access`)
+      .then((r) => r.json())
+      .then(setAccess)
+      .catch(() => undefined);
   }, []);
 
   const addLine = useCallback((line: Omit<Line, "id">) => {
@@ -51,10 +57,11 @@ export function useCall() {
     setState("ended");
   }, []);
 
-  const start = useCallback(() => {
+  const start = useCallback((passphrase?: string) => {
     setLines([]);
     setTiming(null);
     setError(null);
+    setRefused(null);
     setState("connecting");
     // Started from inside the click that begins the call. A browser will not
     // produce sound until the person has interacted with the page, so doing
@@ -65,6 +72,10 @@ export function useCall() {
     socket.current = ws;
 
     ws.onopen = () => {
+      // Sent before anything else, because the far end will not talk without it.
+      if (passphrase !== undefined) {
+        ws.send(JSON.stringify({ passphrase }));
+      }
       setState("listening");
       // Only once the socket is open, or the first words are captured and
       // dropped before there is anywhere to send them.
@@ -93,6 +104,13 @@ export function useCall() {
       switch (message.type) {
         case "ready":
           setCapabilities(message);
+          break;
+        case "refused":
+          // Turned away rather than broken, so it is said plainly instead of
+          // looking like a failure.
+          setRefused(message.reason);
+          setState("ended");
+          void microphone.current.stop();
           break;
         case "hearing":
           // What is being picked up, before the turn is judged finished.
@@ -177,6 +195,8 @@ export function useCall() {
     timing,
     capabilities,
     error,
+    refused,
+    access,
     start,
     hangUp,
     say,
