@@ -4,6 +4,8 @@ __pycache__/
 .venv/
 venv/
 .env
+# Built from .env for pasting into a host. Full of secrets.
+.env.render
 *.env.local
 .pytest_cache/
 .ruff_cache/

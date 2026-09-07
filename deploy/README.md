@@ -21,6 +21,22 @@ psql "$DATABASE_URL" -f db/init.sql
 cd agent && python -m rag.ingest
 ```
 
+## The environment file
+
+Do not upload `.env`. Two things in it are wrong for a host.
+
+`DATABASE_URL` points at a container that only exists inside compose, so the
+deployed service would start and then fail on everything that touches the
+database. And the limits that stop a public link being an open tab on someone
+else's budget are off locally, because there is nobody to protect against.
+
+```sh
+python scripts/render_env.py     # writes .env.render
+```
+
+Change `WREN_PASSPHRASE` in it, then upload that file instead. It is kept out of
+version control.
+
 ## 2. Services
 
 ```sh
