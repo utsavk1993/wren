@@ -8,6 +8,7 @@ available so a deployment without speech credentials is still usable.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -78,6 +79,8 @@ class CallHandler:
         # One identifier for the call, the same one the record and the logs use.
         # Two would mean a log line and a stored call could not be matched up.
         self.call_id = conversation.record.id
+        # Set when the call is over, from whichever side ended it.
+        self._finished = asyncio.Event()
 
     async def aclose(self) -> None:
         # However the call ended, including badly, the record is closed off.
@@ -112,8 +115,10 @@ class CallHandler:
         await self._send("ready", call_id=self.call_id, **capabilities())
         await self._say(Utterance(GREETING))
 
-        while True:
-            raw = await self.websocket.receive_text()
+        while not self._finished.is_set():
+            raw = await self._next_message()
+            if raw is None:
+                break
             try:
                 message = json.loads(raw)
             except ValueError:
@@ -136,13 +141,54 @@ class CallHandler:
             elif kind == "hangup":
                 break
 
+    async def _next_message(self) -> str | None:
+        """The next thing the browser says, or nothing once the call is over.
+
+        Either side can end a call. The browser sends "hangup" when someone
+        presses the button, and the agent ends it when the caller says goodbye
+        — which is decided while handling a turn, on the task the listener
+        runs on rather than this one. Waiting on the socket alone would miss
+        that and hold the line open until the caller closed the page.
+        """
+        incoming = asyncio.ensure_future(self.websocket.receive_text())
+        ending = asyncio.ensure_future(self._finished.wait())
+        try:
+            done, _ = await asyncio.wait(
+                {incoming, ending}, return_when=asyncio.FIRST_COMPLETED
+            )
+        finally:
+            for task in (incoming, ending):
+                if not task.done():
+                    task.cancel()
+        return incoming.result() if incoming in done else None
+
+    async def _end_call(self) -> None:
+        """Put the phone down, once what was being said has been said.
+
+        The caller asked to end the call, so it ends whatever the model wrote
+        back. The listener is deliberately left to the teardown that follows:
+        this runs on the task the listener reads on, so closing it here would
+        cancel the task mid-way and nothing past that point would happen —
+        including telling the browser.
+        """
+        log.info("call %s: caller said goodbye, ending the call", self.call_id)
+        await self._send("hangup")
+        self._finished.set()
+
     async def _handle(self, said: str) -> None:
+        # A turn already in flight when the call ended has nowhere to go. The
+        # socket is on its way down and anything sent now fails on a closed
+        # connection.
+        if self._finished.is_set():
+            return
         await self._send("caller_said", text=said)
         async for utterance in self.pipeline.respond_to(said):
             await self._say(utterance)
         record = self.pipeline.session.conversation.record
         if record.timings:
             await self._send("timing", **record.timings[-1])
+        if self.pipeline.session.conversation.state.caller_said_goodbye:
+            await self._end_call()
 
     async def _say(self, utterance: Utterance) -> None:
         await self._send(

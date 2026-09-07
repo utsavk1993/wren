@@ -123,6 +123,17 @@ export function useCall() {
           playback.current.stop();
           setState("listening");
           break;
+        case "hangup":
+          // The agent ended the call, because the caller asked it to. The
+          // playback is deliberately left alone: the closing line has already
+          // been queued ahead of real time, and stopping it here would cut the
+          // goodbye off mid-word. The microphone goes now, since nothing more
+          // is going to be listened to.
+          void microphone.current.stop();
+          socket.current?.close();
+          socket.current = null;
+          setState("ended");
+          break;
       }
     };
   }, [addLine]);

@@ -83,6 +83,10 @@ class Conversation:
             )
         if policy.detect_request_for_a_person(utterance):
             self.state.caller_requested_human = True
+        # Noted before the model replies, so the call ends after whatever it
+        # says next whether or not it worked out that the caller was leaving.
+        if policy.detect_wrapping_up(utterance):
+            self.state.caller_said_goodbye = True
         scope = policy.check_scope(utterance)
         if not scope:
             self.record.denials.append(scope.reason.value)
