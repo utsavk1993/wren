@@ -13,6 +13,7 @@ from voice.turn_taking import (
     TurnDetector,
     looks_finished,
     silence_needed,
+    worth_answering,
 )
 
 
@@ -129,3 +130,37 @@ def test_playback_ending_clears_the_interruption_state():
     barge.agent_stopped_speaking()
     assert not barge.agent_is_speaking
     assert not barge.caller_audio(True, now=1.0)
+
+
+# ---- telling the caller apart from the room ----
+
+@pytest.mark.parametrize("text,confidence", [
+    ("my back door sensor is offline", 0.97),
+    ("yes", 0.95),
+    ("7443", 0.92),
+    ("no it's still showing offline", 0.91),
+])
+def test_the_caller_speaking_clearly_is_answered(text, confidence):
+    keep, why = worth_answering(text, confidence)
+    assert keep, why
+
+
+@pytest.mark.parametrize("text,confidence,because", [
+    ("the", 0.31, "words it was unsure of"),
+    ("car horn", 0.42, "a noise that sounded like words"),
+    ("okay", 0.55, "a short phrase it was unsure of"),
+    ("um", 0.90, "hesitation on its own"),
+    ("uh um", 0.80, "hesitation on its own"),
+    ("", 1.0, "nothing at all"),
+])
+def test_the_room_is_not_answered(text, confidence, because):
+    keep, why = worth_answering(text, confidence)
+    assert not keep, f"{because} should not start a turn"
+    assert why, "and the reason has to be recorded"
+
+
+def test_a_short_answer_the_service_was_sure_of_still_counts():
+    # "Yes" is a real answer to a real question. Length alone is not the test,
+    # or the agent stops hearing the most common replies there are.
+    assert worth_answering("yes", 0.95)[0]
+    assert worth_answering("no", 0.93)[0]
