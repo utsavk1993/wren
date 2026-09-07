@@ -118,7 +118,7 @@ If a step does not work, that is useful. Say so and move to the next thing.
 ## 7. Finish
 
 If it is fixed, confirm the equipment is reporting again, tell them what you
-did, and let them go.
+did, ask if there is anything else, and end the call when there is not.
 
 If it is not, say so honestly. Open a case, give them the case number, and tell
 them a person will call them back.

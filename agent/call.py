@@ -18,6 +18,7 @@ from typing import Any
 from conversation import Conversation
 from llm import get_model
 from rag.retrieve import Retriever
+from systems.notify import Notifier
 from systems.salesforce import SalesforceClient
 from systems.telemetry import TelemetryClient
 from tools.dispatch import Dispatcher
@@ -64,10 +65,14 @@ class CallHandler:
         self.salesforce = SalesforceClient()
         self.telemetry = TelemetryClient()
         self.retriever = Retriever()
+        self.notifier = Notifier()
         self.transcriber = Transcriber(sample_rate_hz=profile.sample_rate_hz)
         self.speaker = Speaker(sample_rate_hz=profile.sample_rate_hz)
         conversation = Conversation(
-            get_model(), Dispatcher(self.salesforce, self.telemetry, self.retriever)
+            get_model(),
+            Dispatcher(
+                self.salesforce, self.telemetry, self.retriever, self.notifier
+            ),
         )
         self.pipeline = VoicePipeline(
             CallSession(conversation=conversation, speaker=self.speaker)
@@ -89,6 +94,7 @@ class CallHandler:
         await self.salesforce.aclose()
         await self.telemetry.aclose()
         await self.retriever.aclose()
+        await self.notifier.aclose()
         await self.speaker.aclose()
 
     async def _send(self, kind: str, **fields: Any) -> None:
@@ -162,7 +168,7 @@ class CallHandler:
                     task.cancel()
         return incoming.result() if incoming in done else None
 
-    async def _end_call(self) -> None:
+    async def _end_call(self, reason: str) -> None:
         """Put the phone down, once what was being said has been said.
 
         The caller asked to end the call, so it ends whatever the model wrote
@@ -171,7 +177,7 @@ class CallHandler:
         cancel the task mid-way and nothing past that point would happen —
         including telling the browser.
         """
-        log.info("call %s: caller said goodbye, ending the call", self.call_id)
+        log.info("call %s: ending the call (%s)", self.call_id, reason)
         await self._send("hangup")
         self._finished.set()
 
@@ -187,8 +193,11 @@ class CallHandler:
         record = self.pipeline.session.conversation.record
         if record.timings:
             await self._send("timing", **record.timings[-1])
-        if self.pipeline.session.conversation.state.caller_said_goodbye:
-            await self._end_call()
+        state = self.pipeline.session.conversation.state
+        # Either the caller said goodbye, or the agent decided the conversation
+        # was over and called the tool for it.
+        if state.caller_said_goodbye or state.call_should_end:
+            await self._end_call(state.ending_reason or "the caller said goodbye")
 
     async def _say(self, utterance: Utterance) -> None:
         await self._send(
