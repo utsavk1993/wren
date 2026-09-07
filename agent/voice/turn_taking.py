@@ -119,12 +119,38 @@ def silence_needed(transcript: str) -> TurnDecision:
 class TurnDetector:
     """Watches speech and silence and says when a turn has ended."""
 
-    transcript: str = ""
+    # What the service has finalised so far this turn, and the phrase it is
+    # still revising. These are kept apart because they behave differently. A
+    # finalised phrase will not be revisited, so the next one continues it. An
+    # interim result is a better guess at the same words, so it replaces the
+    # last one.
+    #
+    # Holding only the newest phrase is what ate callers' words: the service
+    # finalises after a pause of a few hundred milliseconds, which happens
+    # several times in one sentence, and each finalised phrase covers only the
+    # audio since the last one. A caller who said "I need to reset my front
+    # door sensor" arrived as three phrases and the agent was handed the third.
+    settled: list[str] = field(default_factory=list)
+    pending: str = ""
     silence_ms: float = 0.0
     _speaking_since: float | None = field(default=None, repr=False)
 
-    def heard_speech(self, transcript: str) -> None:
-        self.transcript = transcript
+    @property
+    def transcript(self) -> str:
+        """Everything heard this turn, finalised phrases and the one in flight."""
+        return " ".join([*self.settled, self.pending]).strip()
+
+    def heard_speech(self, transcript: str, is_final: bool = False) -> None:
+        text = (transcript or "").strip()
+        if not text:
+            return
+        if is_final:
+            # Final phrases already contain whatever was in flight, so the
+            # pending guess is spent rather than lost.
+            self.settled.append(text)
+            self.pending = ""
+        else:
+            self.pending = text
         self.silence_ms = 0.0
 
     def heard_silence(self, milliseconds: float) -> TurnDecision:
@@ -140,7 +166,8 @@ class TurnDetector:
         return TurnDecision(False, int(needed.wait_ms - self.silence_ms), needed.reason)
 
     def reset(self) -> None:
-        self.transcript = ""
+        self.settled = []
+        self.pending = ""
         self.silence_ms = 0.0
         self._speaking_since = None
 

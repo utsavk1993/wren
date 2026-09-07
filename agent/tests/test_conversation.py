@@ -303,6 +303,26 @@ async def test_asking_for_a_person_is_recorded_immediately():
     assert convo.state.caller_requested_human
 
 
+async def test_a_caller_saying_goodbye_is_recorded_immediately():
+    """Noted from what the caller said, not from what the model wrote back.
+
+    The call is ended on this flag, so it cannot depend on the model choosing
+    to notice. A caller who says goodbye and is asked another question has no
+    way off the line short of closing the page.
+    """
+    model = ScriptedModel([Reply(text="Take care.")])
+    convo = build(model)
+    await convo.say("that's all I needed, thanks, bye")
+    assert convo.state.caller_said_goodbye
+
+
+async def test_a_caller_still_working_through_a_fix_is_not_hung_up_on():
+    model = ScriptedModel([Reply(text="Good. Now hold the button for ten seconds.")])
+    convo = build(model)
+    await convo.say("okay, that's it, the light just came on")
+    assert not convo.state.caller_said_goodbye
+
+
 async def test_an_out_of_scope_question_is_flagged_to_the_model():
     model = ScriptedModel([Reply(text="That's not something I can help with.")])
     convo = build(model)

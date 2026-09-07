@@ -83,7 +83,7 @@ class VoicePipeline:
         session = self.session
 
         if transcript.text:
-            session.turns.heard_speech(transcript.text)
+            session.turns.heard_speech(transcript.text, transcript.is_final)
             if session.barge_in.agent_is_speaking:
                 session.interrupted = True
 

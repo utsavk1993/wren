@@ -22,6 +22,7 @@ from policy import (
     may_disclose_account_details,
     may_give_these_steps,
     may_troubleshoot,
+    detect_wrapping_up,
     should_escalate,
 )
 from systems.models import AccountStatus, CaseHistory, Customer, Device, SupportCase
@@ -208,6 +209,40 @@ def test_a_request_for_a_person_ends_troubleshooting_immediately():
     ruling = may_troubleshoot(state)
     assert not ruling and ruling.reason is Denial.CALLER_ASKED_FOR_A_PERSON
     assert "without making them justify" in ruling.guidance
+
+
+@pytest.mark.parametrize("utterance", [
+    "okay, goodbye",
+    "thanks, bye",
+    "you can hang up now",
+    "that's all I needed",
+    "that's everything",
+    "nothing else, thanks",
+    "I'm all set",
+    "we're done here",
+    "have a good one",
+])
+def test_a_caller_ending_the_call_is_recognised(utterance):
+    assert detect_wrapping_up(utterance)
+
+
+@pytest.mark.parametrize("utterance", [
+    "thanks for that",
+    "great, that worked",
+    "okay, what's next",
+    "so I hold the button down",
+    "it's all flashing now",
+    "that's the one that's broken",
+    "that's it, the light is on now",
+])
+def test_being_partway_through_is_not_mistaken_for_leaving(utterance):
+    """Hanging up on someone mid-repair is far worse than staying on the line.
+
+    Everything here is said in the middle of a call, often right after a step
+    has worked, which is exactly when a caller sounds like they are finishing
+    and is not.
+    """
+    assert not detect_wrapping_up(utterance)
 
 
 def test_an_emergency_outranks_everything():

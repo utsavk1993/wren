@@ -164,3 +164,42 @@ def test_a_short_answer_the_service_was_sure_of_still_counts():
     # or the agent stops hearing the most common replies there are.
     assert worth_answering("yes", 0.95)[0]
     assert worth_answering("no", 0.93)[0]
+
+
+def test_a_turn_keeps_every_finalised_phrase():
+    """The service finalises several times inside one sentence.
+
+    Each finalised phrase covers only the audio since the last one, so holding
+    the newest and discarding the rest hands the agent the tail of what was
+    said. A caller asking about a sensor was arriving as "door sensor", which
+    reads as a different question from the one they asked.
+    """
+    detector = TurnDetector()
+    detector.heard_speech("I need to reset", is_final=True)
+    detector.heard_speech("my front", is_final=True)
+    detector.heard_speech("door sensor.", is_final=True)
+    assert detector.transcript == "I need to reset my front door sensor."
+
+
+def test_an_interim_guess_replaces_the_last_one():
+    """Interim results are revisions of the same words, not new ones."""
+    detector = TurnDetector()
+    detector.heard_speech("my back door")
+    detector.heard_speech("my back door sensor")
+    assert detector.transcript == "my back door sensor"
+
+
+def test_a_final_phrase_absorbs_the_guess_it_was_revising():
+    detector = TurnDetector()
+    detector.heard_speech("I need to")
+    detector.heard_speech("I need to reset it", is_final=True)
+    assert detector.transcript == "I need to reset it"
+
+
+def test_words_from_a_finished_turn_do_not_leak_into_the_next():
+    detector = TurnDetector()
+    detector.heard_speech("my door sensor is offline.", is_final=True)
+    assert detector.heard_silence(MAX_SILENCE_MS).finished
+    detector.reset()
+    detector.heard_speech("it's flashing red.", is_final=True)
+    assert detector.transcript == "it's flashing red."

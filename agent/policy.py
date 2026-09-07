@@ -76,6 +76,7 @@ class CallState:
     steps_given: list[str] = field(default_factory=list)
     caller_requested_human: bool = False
     emergency_declared: bool = False
+    caller_said_goodbye: bool = False
     case_number: str | None = None
 
     @property
@@ -101,6 +102,21 @@ EMERGENCY_PATTERNS = [
     r"\bsomeone('s| is)? (in|inside) (my|the) house\b", r"\bbreak(ing)? in\b",
     r"\bintruder", r"\bburglar", r"\bhurt\b", r"\binjured\b", r"\bbleeding\b",
     r"\bcan'?t breathe\b", r"\bheart attack\b", r"\bambulance\b",
+]
+
+# The caller ending the call, rather than asking for something. Kept to the
+# plain forms, because hanging up on someone who was about to ask the next
+# question is far worse than staying on the line a moment too long. "Thanks"
+# and "great, that worked" are deliberately absent: people say both in the
+# middle of a repair. So is "that's it", which is how a caller confirms they
+# have found the right button as often as it is how they say goodbye.
+WRAPPING_UP_PATTERNS = [
+    r"\b(good)?bye\b", r"\bbye now\b",
+    r"\bhang up\b", r"\bhang the phone up\b", r"\bput the phone down\b",
+    r"\bend (the|this) call\b", r"\b(that'?s|thats) (all|everything)\b",
+    r"\bnothing else\b", r"\bthat'?s me done\b",
+    r"\bi'?m (all )?(done|good|set|sorted)\b", r"\bwe'?re (all )?done\b",
+    r"\bhave a good (one|day|night|evening)\b",
 ]
 
 ASKED_FOR_A_PERSON_PATTERNS = [
@@ -135,6 +151,17 @@ def detect_out_of_scope(utterance: str) -> bool:
 
 def detect_request_for_a_person(utterance: str) -> bool:
     return _matches(ASKED_FOR_A_PERSON_PATTERNS, utterance)
+
+
+def detect_wrapping_up(utterance: str) -> bool:
+    """Whether the caller is finishing the call rather than asking something.
+
+    Read in code rather than left to the model. A caller who has said goodbye
+    twice and is still being asked questions has no way to get off the line
+    short of closing the page, and "hang up" is not an instruction that should
+    depend on how a reply happened to be worded.
+    """
+    return _matches(WRAPPING_UP_PATTERNS, utterance)
 
 
 def may_disclose_account_details(state: CallState) -> Ruling:
