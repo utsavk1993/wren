@@ -1,0 +1,48 @@
+# The whole thing as one service on a free plan.
+#
+# Free means it stops after fifteen minutes of quiet and takes about a minute to
+# start again, so the page explains the wait rather than looking broken.
+
+services:
+  - type: web
+    name: wren
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      # Set in the dashboard, never here.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: SALESFORCE_INSTANCE_URL
+        sync: false
+      - key: SALESFORCE_CLIENT_ID
+        sync: false
+      - key: SALESFORCE_CLIENT_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      # The agent's own tables. The pooler address, not the direct one, which
+      # resolves over IPv6 only and is unreachable from most hosts.
+      - key: DATABASE_URL
+        sync: false
+      - key: WREN_PASSPHRASE
+        sync: false
+      - key: WREN_LLM_MODEL
+        value: claude-haiku-4-5
+      - key: EMBEDDINGS_PROVIDER
+        value: local
+      - key: LOG_FORMAT
+        value: json
+      - key: WREN_MAX_CONCURRENT
+        value: "3"
+      - key: WREN_MAX_CALLS_PER_DAY
+        value: "200"
+      # The page is served by this same service, so requests never cross an
+      # origin and nothing else should be allowed to.
+      - key: WREN_ALLOWED_ORIGINS
+        value: "*"

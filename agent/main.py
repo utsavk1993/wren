@@ -35,12 +35,16 @@ import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
-import observability
 import history
+import observability
+from access import gate
 from call import CallHandler, capabilities, warm_up
 
 observability.configure()
@@ -74,6 +78,16 @@ def health() -> dict[str, str]:
     return {"status": "ok", "service": "agent"}
 
 
+@app.get("/access")
+def read_access() -> dict[str, object]:
+    """Whether a passphrase is needed, and how much room is left.
+
+    The page asks before showing anything, so a deployment that is full says so
+    rather than failing when someone presses the button.
+    """
+    return gate().status()
+
+
 @app.get("/capabilities")
 def read_capabilities() -> dict[str, object]:
     """What this deployment can actually do.
@@ -100,10 +114,42 @@ def read_call(call_id: str) -> dict:
     return dict(found)
 
 
+# Written by the build and copied in. Absent when running from source, where a
+# development server serves the page instead.
+WEB_ROOT = Path(__file__).parent / "web"
+
+if WEB_ROOT.is_dir():
+    app.mount("/assets", StaticFiles(directory=WEB_ROOT / "assets"), name="assets")
+
+    @app.get("/")
+    def index() -> FileResponse:
+        return FileResponse(WEB_ROOT / "index.html")
+
+
 @app.websocket("/call")
 async def call(websocket: WebSocket) -> None:
     """One call, for as long as the caller stays connected."""
     await websocket.accept()
+
+    entry = gate()
+    if entry.guarded:
+        # Asked for before anything is spent, and refused in words rather than
+        # by closing the socket, which looks like a fault.
+        first = await websocket.receive_json()
+        if not entry.check_passphrase(str(first.get("passphrase", ""))):
+            await websocket.send_json(
+                {"type": "refused", "reason": "That passphrase is not right."}
+            )
+            await websocket.close()
+            return
+
+    allowed, why = entry.may_start()
+    if not allowed:
+        await websocket.send_json({"type": "refused", "reason": why})
+        await websocket.close()
+        return
+
+    entry.started()
     handler = CallHandler(websocket)
     try:
         await handler.run()
@@ -112,4 +158,5 @@ async def call(websocket: WebSocket) -> None:
     except Exception:
         log.exception("call %s failed", handler.call_id)
     finally:
+        entry.ended()
         await handler.aclose()

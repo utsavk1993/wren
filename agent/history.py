@@ -30,6 +30,15 @@ def _database_url() -> str:
     return os.getenv("DATABASE_URL", "postgresql://wren:wren@db:5432/wren")
 
 
+def _search_path() -> str:
+    """Where the call records live.
+
+    Its own schema when the database is shared with the systems the agent reads
+    from, and the ordinary one when it is not.
+    """
+    return os.getenv("WREN_SEARCH_PATH", "public")
+
+
 def save(record: Any, *, customer_external_id: str | None, verified: bool,
          escalated: bool = False, ended: bool = False) -> None:
     """Write the call as it currently stands.
@@ -39,6 +48,7 @@ def save(record: Any, *, customer_external_id: str | None, verified: bool,
     """
     try:
         with psycopg.connect(_database_url(), connect_timeout=3) as conn:
+            conn.execute(f"SET search_path TO {_search_path()}")
             conn.execute(
                 """
                 INSERT INTO calls (
@@ -86,6 +96,7 @@ def save(record: Any, *, customer_external_id: str | None, verified: bool,
 def list_calls(limit: int = 50) -> list[dict]:
     """Recent calls, newest first, with enough to choose one to open."""
     with psycopg.connect(_database_url(), row_factory=dict_row) as conn:
+        conn.execute(f"SET search_path TO {_search_path()}")
         return conn.execute(
             """
             SELECT id, customer_external_id, verified, escalated,
@@ -106,4 +117,5 @@ def list_calls(limit: int = 50) -> list[dict]:
 def get_call(call_id: str) -> dict | None:
     """One call in full."""
     with psycopg.connect(_database_url(), row_factory=dict_row) as conn:
+        conn.execute(f"SET search_path TO {_search_path()}")
         return conn.execute("SELECT * FROM calls WHERE id = %s", (call_id,)).fetchone()
