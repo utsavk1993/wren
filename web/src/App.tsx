@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { CallButton } from "./components/CallButton";
 import { CallDetail } from "./components/CallDetail";
 import { CallList } from "./components/CallList";
 import { useCall } from "./hooks/useCall";
@@ -7,18 +8,18 @@ import { useCallDetail, useCallList } from "./hooks/useCalls";
 import type { CallState } from "./types";
 
 const STATE_LABEL: Record<CallState, string> = {
-  idle: "Not connected",
+  idle: "Ready when you are",
   connecting: "Connecting",
   listening: "Listening",
-  thinking: "Working on it",
-  speaking: "Speaking",
+  thinking: "One moment",
+  speaking: "Wren is speaking",
   ended: "Call ended",
 };
 
 type Tab = "call" | "history";
 
 function LiveCall() {
-  const { state, lines, hearing, timing, capabilities, error, start, hangUp, say } =
+  const { state, lines, hearing, timing, capabilities, error, start, hangUp, say, level } =
     useCall();
   const [draft, setDraft] = useState("");
   // Speaking is the point. Typing stays for when there is no microphone, or
@@ -46,21 +47,20 @@ function LiveCall() {
 
   return (
     <>
-      <div className="status">
-        <span className={`dot ${state}`} aria-hidden />
-        <span>{STATE_LABEL[state]}</span>
-      </div>
-
-      {error && <p className="error">{error}</p>}
-
-      <main className="transcript" aria-live="polite">
-        {lines.length === 0 && !onCall && (
-          <p className="empty">
+      <div className="stage">
+        <CallButton state={state} level={level} onStart={start} onEnd={hangUp} />
+        <p className={`stage-state ${state}`}>{STATE_LABEL[state]}</p>
+        {!onCall && (
+          <p className="stage-hint">
             {canSpeak
-              ? "Call, allow the microphone, and just talk."
+              ? "Allow the microphone and just talk."
               : "Speech isn't configured here, so the call is typed."}
           </p>
         )}
+        {error && <p className="error">{error}</p>}
+      </div>
+
+      <main className="transcript" aria-live="polite">
         {lines.map((line) => (
           <div
             key={line.id}
@@ -87,43 +87,29 @@ function LiveCall() {
         </p>
       )}
 
-      <form className="composer" onSubmit={send}>
-        {!onCall ? (
-          <button type="button" className="primary" onClick={start}>
-            {state === "ended" ? "Call again" : "Call"}
+      {onCall && (typing || !canSpeak) && (
+        <form className="composer" onSubmit={send}>
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Type instead"
+            autoFocus
+          />
+          <button type="submit" disabled={!draft.trim()}>
+            Send
           </button>
-        ) : (
-          <>
-            {typing || !canSpeak ? (
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Type instead"
-                autoFocus
-              />
-            ) : (
-              <span className="speaking-hint">
-                {state === "speaking"
-                  ? "Wren is speaking — talk over it to interrupt"
-                  : "Listening. Just talk."}
-              </span>
-            )}
-            {(typing || !canSpeak) && (
-              <button type="submit" disabled={!draft.trim()}>
-                Send
-              </button>
-            )}
-            {canSpeak && (
-              <button type="button" onClick={() => setTyping(!typing)}>
-                {typing ? "Speak" : "Type"}
-              </button>
-            )}
-            <button type="button" className="hangup" onClick={hangUp}>
-              Hang up
+          {canSpeak && (
+            <button type="button" onClick={() => setTyping(false)}>
+              Speak
             </button>
-          </>
-        )}
-      </form>
+          )}
+        </form>
+      )}
+      {onCall && canSpeak && !typing && (
+        <button type="button" className="switch" onClick={() => setTyping(true)}>
+          Type instead
+        </button>
+      )}
     </>
   );
 }

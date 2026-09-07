@@ -35,6 +35,7 @@ export class Microphone {
   private stream: MediaStream | null = null;
   private context: AudioContext | null = null;
   private node: AudioWorkletNode | null = null;
+  private analyser: AnalyserNode | null = null;
   private pending: Float32Array[] = [];
   private pendingLength = 0;
 
@@ -67,6 +68,12 @@ export class Microphone {
     URL.revokeObjectURL(url);
 
     const source = this.context.createMediaStreamSource(this.stream);
+    // Tapped so the page can show the caller's own voice moving. Not knowing
+    // whether the microphone is picking anything up was the single most
+    // confusing thing about using this.
+    this.analyser = this.context.createAnalyser();
+    this.analyser.fftSize = 256;
+    source.connect(this.analyser);
     this.node = new AudioWorkletNode(this.context, "capture");
     this.node.port.onmessage = (event) => {
       this.collect(event.data as Float32Array, this.context!.sampleRate, send);
@@ -104,9 +111,20 @@ export class Microphone {
     }
   }
 
+  /** How loud the caller is right now, from nothing to one. */
+  get level(): number {
+    if (!this.analyser) return 0;
+    const samples = new Uint8Array(this.analyser.frequencyBinCount);
+    this.analyser.getByteTimeDomainData(samples);
+    let peak = 0;
+    for (const sample of samples) peak = Math.max(peak, Math.abs(sample - 128));
+    return Math.min(1, peak / 45);
+  }
+
   async stop(): Promise<void> {
     this.node?.disconnect();
     this.node = null;
+    this.analyser = null;
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
     await this.context?.close();
