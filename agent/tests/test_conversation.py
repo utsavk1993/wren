@@ -95,7 +95,29 @@ class FakeRetriever:
         ]
 
 
-def build(model, salesforce=None, telemetry=None, retriever=None) -> Conversation:
+class FakeNotifier:
+    """Records what would have gone out, and whether it was allowed to."""
+
+    def __init__(self, works: bool = True):
+        self.works = works
+        self.sent: list[tuple[str, str, str]] = []
+
+    async def send_sms(self, to, body):
+        from systems.notify import Delivery
+        self.sent.append(("sms", to, body))
+        return Delivery("sms", to, self.works, "" if self.works else "refused")
+
+    async def send_email(self, to, subject, body):
+        from systems.notify import Delivery
+        self.sent.append(("email", to, body))
+        return Delivery("email", to, self.works, "" if self.works else "refused")
+
+    async def aclose(self):
+        return None
+
+
+def build(model, salesforce=None, telemetry=None, retriever=None,
+          notifier=None) -> Conversation:
     from tools.dispatch import Dispatcher
     return Conversation(
         model,
@@ -103,6 +125,7 @@ def build(model, salesforce=None, telemetry=None, retriever=None) -> Conversatio
             salesforce or FakeSalesforce(),
             telemetry or FakeTelemetry(),
             retriever or FakeRetriever(),
+            notifier or FakeNotifier(),
         ),
     )
 
@@ -359,6 +382,96 @@ async def test_a_looping_turn_gives_up_rather_than_running_forever():
     convo.state.verified = True
     reply = await convo.say("what's wrong")
     assert "call you back" in reply.lower()
+
+
+# ---- opening a case, and finishing the call ----
+
+async def test_a_case_is_confirmed_in_writing():
+    """The number is read out and also texted and emailed.
+
+    A number said once, over the phone, to somebody standing over a broken
+    sensor is a number they will not have in an hour.
+    """
+    notifier = FakeNotifier()
+    model = ScriptedModel([
+        tool("open_case", summary="sensor offline", detail="battery replaced, still down"),
+        Reply(text="That's case 00123456. I've texted it to you as well."),
+    ])
+    convo = build(model, notifier=notifier)
+    convo.state.customer = a_customer()
+    convo.state.verified = True
+    await convo.say("it's still not working")
+
+    channels = [channel for channel, _, _ in notifier.sent]
+    assert sorted(channels) == ["email", "sms"]
+    result = convo.record.tool_calls[0]["result"]
+    assert result["texted"] and result["emailed"]
+
+
+async def test_the_case_number_is_the_only_account_detail_sent():
+    """A text sits unlocked on a screen and an inbox outlives the call."""
+    notifier = FakeNotifier()
+    model = ScriptedModel([
+        tool("open_case", summary="sensor offline", detail="still down"),
+        Reply(text="That's case 00123456."),
+    ])
+    convo = build(model, notifier=notifier)
+    customer = a_customer()
+    convo.state.customer = customer
+    convo.state.verified = True
+    await convo.say("it's still not working")
+
+    for _, _, body in notifier.sent:
+        assert customer.full_name not in body
+        assert customer.street not in body
+
+
+async def test_a_text_that_did_not_go_is_not_claimed():
+    """Saying "I've texted you" when nothing went is worse than staying quiet."""
+    notifier = FakeNotifier(works=False)
+    model = ScriptedModel([
+        tool("open_case", summary="sensor offline", detail="still down"),
+        Reply(text="That's case 00123456."),
+    ])
+    convo = build(model, notifier=notifier)
+    convo.state.customer = a_customer()
+    convo.state.verified = True
+    await convo.say("it's still not working")
+
+    result = convo.record.tool_calls[0]["result"]
+    assert not result["texted"] and not result["emailed"]
+    assert "do not say that you texted" in result["guidance"]
+
+
+async def test_the_agent_can_end_a_call_once_the_fault_is_fixed():
+    model = ScriptedModel([
+        tool("recheck_equipment", device_external_id="DEV-2001"),
+        tool("end_call", reason="sensor is reporting again"),
+        Reply(text="Take care."),
+    ])
+    convo = build(model)
+    convo.state.customer = a_customer()
+    convo.state.verified = True
+    await convo.say("I've put the battery back in")
+
+    assert convo.state.call_should_end
+    assert convo.state.ending_reason == "sensor is reporting again"
+
+
+async def test_the_agent_cannot_hang_up_on_an_unanswered_question():
+    """Refused, and told what to do instead, rather than obeyed."""
+    model = ScriptedModel([
+        tool("end_call", reason="I don't know the answer"),
+        Reply(text="Let me get someone who can help with that."),
+    ])
+    convo = build(model)
+    convo.state.customer = a_customer()
+    convo.state.verified = True
+    await convo.say("why is my panel beeping at three in the morning")
+
+    assert not convo.state.call_should_end
+    result = convo.record.tool_calls[0]["result"]
+    assert result["refused"] == policy.Denial.NOTHING_CONCLUDED.value
 
 
 # ---- the record ----

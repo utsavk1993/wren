@@ -23,6 +23,7 @@ from policy import (
     may_give_these_steps,
     may_troubleshoot,
     detect_wrapping_up,
+    may_end_call,
     should_escalate,
 )
 from systems.models import AccountStatus, CaseHistory, Customer, Device, SupportCase
@@ -249,6 +250,36 @@ def test_an_emergency_outranks_everything():
     state = verified_state(emergency_declared=True)
     assert should_escalate(state).reason is Denial.EMERGENCY
     assert may_troubleshoot(state).reason is Denial.EMERGENCY
+
+
+# ---- ending the call ----
+
+def test_a_call_cannot_end_before_anything_is_settled():
+    """Hanging up is not a way out of a question.
+
+    The model decides when a conversation is finished, but not that it is
+    finished simply because it has run out of ideas. That is what opening a
+    case and handing over are for.
+    """
+    ruling = may_end_call(verified_state())
+    assert not ruling and ruling.reason is Denial.NOTHING_CONCLUDED
+    assert "have not answered" in ruling.guidance
+
+
+@pytest.mark.parametrize("reached", [
+    {"fault_resolved": True},
+    {"case_number": "00123456"},
+    {"caller_requested_human": True},
+    {"caller_said_goodbye": True},
+    {"emergency_declared": True},
+])
+def test_a_call_may_end_once_the_caller_knows_what_happens_next(reached):
+    assert may_end_call(verified_state(**reached))
+
+
+def test_an_unidentified_caller_saying_goodbye_may_still_leave():
+    """Ending a call needs no account. Anyone may hang up."""
+    assert may_end_call(CallState(caller_said_goodbye=True))
 
 
 # ---- what the agent is allowed to say ----

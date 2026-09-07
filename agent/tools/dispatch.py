@@ -19,6 +19,7 @@ import policy
 from llm import ToolCall
 from rag.retrieve import Retriever
 from systems.models import ONLINE, DeviceStatus, is_monitored
+from systems.notify import Notifier
 from systems.salesforce import SalesforceClient
 from systems.telemetry import TelemetryClient, TelemetryError
 
@@ -31,10 +32,12 @@ class Dispatcher:
         salesforce: SalesforceClient,
         telemetry: TelemetryClient,
         retriever: Retriever,
+        notifier: Notifier | None = None,
     ) -> None:
         self.salesforce = salesforce
         self.telemetry = telemetry
         self.retriever = retriever
+        self.notifier = notifier or Notifier()
         self.last_passages: list[str] = []
         self.last_titles: list[str] = []
 
@@ -207,12 +210,18 @@ class Dispatcher:
             device = await self.telemetry.set_device_status(device_id, ONLINE)
 
         state.device_under_discussion = device
+        if device.status == ONLINE:
+            # The one thing that counts as the problem being over, and the only
+            # place it is set.
+            state.fault_resolved = True
         return {
             "id": device.external_id,
             "name": device.name,
             "reporting": device.status == ONLINE,
             "guidance": (
-                "It is reporting again. Confirm that with the caller and close the call."
+                "It is reporting again. Tell the caller what you did and that it is "
+                "working, ask if there is anything else, and end the call when there "
+                "is not."
                 if device.status == ONLINE
                 else "Still not reporting. Say so honestly rather than trying again."
             ),
@@ -269,11 +278,81 @@ class Dispatcher:
             device_external_id=args.get("device_external_id"),
         )
         state.case_number = case_number
+
+        # Sent while the caller is still on the line, so what the agent says
+        # next can be true. A number spoken once to somebody standing over a
+        # broken sensor is a number they will not have in an hour.
+        written = await self._confirm_in_writing(state.customer, case_number)
+
+        told = []
+        if written["texted"]:
+            told.append("a text")
+        if written["emailed"]:
+            told.append("an email")
+        confirmation = (
+            f"You have sent them {' and '.join(told)} with the case number, so say so "
+            "— it saves them writing it down."
+            if told
+            else "Nothing was sent in writing, so do not say that you texted or "
+            "emailed them."
+        )
+
         return {
             "case_number": case_number,
+            "texted": written["texted"],
+            "emailed": written["emailed"],
             "guidance": (
-                "Read the case number back to the caller. Do not say when anyone will "
-                "call, because you do not know."
+                "Say the case number clearly; it is the one thing they may need to "
+                f"write down. {confirmation} Then tell them someone from the team "
+                "will be in touch. Do not say when, because you do not know, and do "
+                "not recap the call."
+            ),
+        }
+
+    async def _confirm_in_writing(self, customer, case_number: str) -> dict[str, bool]:
+        """Text and email the case number. Never raises.
+
+        The case is already open in the customer system by the time this runs.
+        A messaging provider being down is not a reason for the caller to hear
+        an error, so a failure here only changes what the agent says.
+
+        Neither message carries anything about the account beyond the case
+        number. A text sits unlocked on a screen and an inbox outlives the
+        call, and neither is a place to put a name, an address or a passcode.
+        """
+        body = (
+            f"Your case number is {case_number}. Someone from the team will be in "
+            "touch about your equipment."
+        )
+        # Both at once. This is happening mid-call and two round trips in
+        # series is a pause the caller can hear.
+        sms, email = await asyncio.gather(
+            self.notifier.send_sms(customer.phone, body),
+            self.notifier.send_email(
+                customer.email, f"Your case {case_number}", body
+            ),
+        )
+        # Whether each went is returned to the model and so lands on the call
+        # record with the rest of the tool call. Where it went is in the log,
+        # with the address reduced to something traceable but not usable.
+        return {"texted": sms.sent, "emailed": email.sent}
+
+    async def _end_call(self, args: dict, state: policy.CallState) -> dict:
+        """Let the model put the phone down, once there is a reason to."""
+        reason = str(args.get("reason", "the conversation finished"))
+        allowed = policy.may_end_call(state)
+        if not allowed:
+            log.info("refused to end the call: nothing concluded")
+            return {"refused": allowed.reason.value, "guidance": allowed.guidance}
+
+        state.call_should_end = True
+        state.ending_reason = reason
+        log.info("ending the call: %s", reason)
+        return {
+            "ending": True,
+            "guidance": (
+                "Say one short closing line and nothing else. The line goes down "
+                "straight after it, so a question there is one nobody hears."
             ),
         }
 
