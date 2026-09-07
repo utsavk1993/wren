@@ -25,16 +25,26 @@ from voice.turn_taking import BargeInDetector, TurnDetector
 
 log = logging.getLogger(__name__)
 
-GREETING = (
-    "Thanks for calling, my name is Wren. Can I take the phone number on your account?"
-)
+GREETING = "Hi, you're through to Wren. What's the number on your account?"
 
-# Said while lookups are running, so the caller hears something during a wait
-# that would otherwise be silence.
-WORKING_ON_IT = "Let me take a look."
+# Said only while the agent is genuinely waiting on another system, and drawn
+# from a few so the caller does not hear the same sentence twice in one call.
+#
+# The first version of this said one fixed line whenever a reply took longer
+# than a moment, which on this system is every reply. Hearing "Let me take a
+# look" before every answer is worse than hearing nothing: silence sounds like
+# someone thinking, repetition sounds like a machine.
+HOLDING_LINES = [
+    "One sec.",
+    "Let me pull that up.",
+    "Just checking.",
+    "Bear with me.",
+    "Give me a moment.",
+]
 
-# Long enough that a quick answer does not get a pointless preamble.
-ACKNOWLEDGE_AFTER_MS = 700
+# Only worth saying at all if the wait is long enough to feel like the line has
+# gone dead. Below this, silence reads as thinking.
+ACKNOWLEDGE_AFTER_MS = 1800
 
 
 @dataclass
@@ -63,6 +73,8 @@ class VoicePipeline:
     def __init__(self, session: CallSession) -> None:
         self.session = session
         self._speaking: asyncio.Task | None = None
+        # Which holding lines have been used, so none is repeated on one call.
+        self._used_holding: list[str] = []
 
     # ---- what the caller says ----
 
@@ -97,11 +109,17 @@ class VoicePipeline:
         session = self.session
         session.interrupted = False
 
+        tools_before = len(session.conversation.record.tool_calls)
         reply_task = asyncio.create_task(session.conversation.say(said))
         done, _ = await asyncio.wait({reply_task}, timeout=ACKNOWLEDGE_AFTER_MS / 1000)
-        if not done:
-            # Still working. Say so rather than leaving the line silent.
-            yield Utterance(WORKING_ON_IT, is_acknowledgement=True)
+
+        if not done and self._waiting_on_a_lookup(tools_before):
+            # Only when another system is actually being asked something. A
+            # pause while the agent decides what to say is not worth narrating,
+            # and narrating every one is what made it sound mechanical.
+            line = self._next_holding_line()
+            if line:
+                yield Utterance(line, is_acknowledgement=True)
 
         reply = await reply_task
         buffer = SentenceBuffer()
@@ -110,6 +128,23 @@ class VoicePipeline:
                 log.info("abandoning the rest of the reply: caller interrupted")
                 return
             yield Utterance(sentence)
+
+    def _waiting_on_a_lookup(self, tools_before: int) -> bool:
+        """Whether another system is being asked something right now."""
+        return len(self.session.conversation.record.tool_calls) > tools_before
+
+    def _next_holding_line(self) -> str | None:
+        """A line not yet used on this call, or nothing if they are spent.
+
+        Running out is the right outcome. A caller who has already heard five of
+        these does not need a sixth; they need the answer.
+        """
+        remaining = [line for line in HOLDING_LINES if line not in self._used_holding]
+        if not remaining:
+            return None
+        chosen = remaining[len(self._used_holding) % len(remaining)]
+        self._used_holding.append(chosen)
+        return chosen
 
     async def play(
         self,

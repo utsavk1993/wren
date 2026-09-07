@@ -22,7 +22,7 @@ from typing import Any
 import websockets
 
 from voice.speech import Transcriber, Transcript
-from voice.turn_taking import MAX_SILENCE_MS, SETTLED_SILENCE_MS
+from voice.turn_taking import MAX_SILENCE_MS, SETTLED_SILENCE_MS, worth_answering
 
 log = logging.getLogger(__name__)
 
@@ -56,10 +56,17 @@ class Listener:
         self._last_audio_at = 0.0
         self._last_speech_at = 0.0
         self._speaking = False
+        # What was heard and discarded, so a caller who is not getting through
+        # leaves a trail rather than silence.
+        self._ignored: list[dict[str, str]] = []
 
     @property
     def listening(self) -> bool:
         return self._socket is not None
+
+    @property
+    def ignored(self) -> list[dict[str, str]]:
+        return list(self._ignored)
 
     async def start(self) -> None:
         if not self.transcriber.configured:
@@ -95,6 +102,16 @@ class Listener:
                 result = self.transcriber.read_event(raw)
                 if result is None:
                     continue
+
+                # A pause carries no words and is always passed on; it is the
+                # signal that ends a turn.
+                if result.text:
+                    keep, why = worth_answering(result.text, result.confidence)
+                    if not keep:
+                        log.info("ignored %r: %s", result.text[:40], why)
+                        self._ignored.append({"text": result.text, "why": why})
+                        continue
+
                 self._last_speech_at = time.monotonic()
                 # A pause reported by the service is real silence in the audio.
                 # Passing it on as elapsed quiet lets the rules about whether a

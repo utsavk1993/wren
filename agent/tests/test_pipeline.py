@@ -6,28 +6,52 @@ import asyncio
 
 import pytest
 
-from voice.pipeline import ACKNOWLEDGE_AFTER_MS, WORKING_ON_IT, CallSession, VoicePipeline
+from voice.pipeline import (
+    ACKNOWLEDGE_AFTER_MS,
+    HOLDING_LINES,
+    CallSession,
+    VoicePipeline,
+)
 from voice.speech import Transcript
 from voice.turn_taking import SETTLED_SILENCE_MS, UNFINISHED_SILENCE_MS
 
 
-class SlowConversation:
-    """Stands in for the conversation, taking a controllable amount of time."""
+class FakeRecord:
+    def __init__(self):
+        self.tool_calls: list[dict] = []
 
-    def __init__(self, reply: str, delay_s: float = 0.0):
+
+class SlowConversation:
+    """Stands in for the conversation, taking a controllable amount of time.
+
+    Whether a tool was reached for is part of the fixture, because that is what
+    decides whether the caller is told to hold on.
+    """
+
+    def __init__(self, reply: str, delay_s: float = 0.0, uses_a_tool: bool = True):
         self.reply = reply
         self.delay_s = delay_s
+        self.uses_a_tool = uses_a_tool
         self.heard: list[str] = []
+        self.record = FakeRecord()
 
     async def say(self, utterance: str) -> str:
         self.heard.append(utterance)
+        if self.uses_a_tool:
+            self.record.tool_calls.append({"name": "find_customer"})
         if self.delay_s:
             await asyncio.sleep(self.delay_s)
         return self.reply
 
 
-def build(reply="Take the cover off. Remove the battery.", delay_s=0.0) -> VoicePipeline:
-    return VoicePipeline(CallSession(conversation=SlowConversation(reply, delay_s)))
+def build(
+    reply="Take the cover off. Remove the battery.",
+    delay_s=0.0,
+    uses_a_tool=True,
+) -> VoicePipeline:
+    return VoicePipeline(
+        CallSession(conversation=SlowConversation(reply, delay_s, uses_a_tool))
+    )
 
 
 # ---- deciding the caller has finished ----
@@ -56,13 +80,34 @@ async def test_a_caller_pausing_mid_sentence_is_not_cut_off():
 
 # ---- filling the wait ----
 
-async def test_a_slow_turn_is_acknowledged_before_the_answer():
+async def test_a_slow_lookup_is_acknowledged_before_the_answer():
     pipe = build(delay_s=(ACKNOWLEDGE_AFTER_MS / 1000) + 0.25)
     spoken = [u async for u in pipe.respond_to("my sensor is offline")]
     assert spoken[0].is_acknowledgement
-    assert spoken[0].text == WORKING_ON_IT
+    assert spoken[0].text in HOLDING_LINES
     assert [u.text for u in spoken[1:]] == \
         ["Take the cover off.", "Remove the battery."]
+
+
+async def test_a_slow_turn_with_no_lookup_is_not_narrated():
+    """Waiting on the model is not worth mentioning; waiting on another system is.
+
+    Saying something before every slow reply is what made the agent sound
+    mechanical, because on this system every reply is slow.
+    """
+    pipe = build(delay_s=(ACKNOWLEDGE_AFTER_MS / 1000) + 0.25, uses_a_tool=False)
+    spoken = [u async for u in pipe.respond_to("my sensor is offline")]
+    assert not any(u.is_acknowledgement for u in spoken)
+
+
+async def test_the_same_holding_line_is_never_heard_twice():
+    pipe = build(delay_s=(ACKNOWLEDGE_AFTER_MS / 1000) + 0.25)
+    heard = []
+    for _ in range(3):
+        async for utterance in pipe.respond_to("still not working"):
+            if utterance.is_acknowledgement:
+                heard.append(utterance.text)
+    assert len(heard) == len(set(heard)), f"repeated itself: {heard}"
 
 
 async def test_a_quick_turn_gets_no_pointless_preamble():

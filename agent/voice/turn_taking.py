@@ -52,6 +52,39 @@ TRAILING_WORDS = {
 # Filler that means the caller is still working out what to say.
 HESITATION = re.compile(r"\b(um+|uh+|er+|hmm+|erm+)\b\s*$", re.I)
 
+# Below this the transcription service is guessing. A television in the next
+# room, a car outside, or somebody else talking produces words with a low score
+# attached, and treating them as speech sends the agent off to answer something
+# nobody said.
+MIN_CONFIDENCE = 0.6
+
+# A phrase this short, on its own, is usually a noise that happened to sound
+# like a word rather than someone addressing the agent. Real answers to real
+# questions are short too, so this only applies to what the service was unsure
+# of.
+MIN_WORDS_WHEN_UNSURE = 3
+
+# Nothing but hesitation. Someone thinking aloud has not finished.
+ONLY_FILLER = re.compile(r"^[\s,.]*((um+|uh+|er+|hmm+|erm+|ah+|oh+)[\s,.]*)+$", re.I)
+
+
+def worth_answering(transcript: str, confidence: float = 1.0) -> tuple[bool, str]:
+    """Whether this is the caller talking, or something else in the room.
+
+    Returns why it was rejected as well, because a caller whose speech keeps
+    being discarded needs someone to be able to find out that it happened.
+    """
+    text = (transcript or "").strip()
+    if not text:
+        return False, "nothing was said"
+    if ONLY_FILLER.match(text):
+        return False, "only hesitation"
+    if confidence < MIN_CONFIDENCE:
+        return False, f"unsure of the words ({confidence:.2f})"
+    if confidence < 0.85 and len(text.split()) < MIN_WORDS_WHEN_UNSURE:
+        return False, f"a short phrase it was unsure of ({confidence:.2f})"
+    return True, ""
+
 
 @dataclass
 class TurnDecision:
