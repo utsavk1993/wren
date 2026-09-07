@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { CallButton } from "./components/CallButton";
 import { CallDetail } from "./components/CallDetail";
 import { CallList } from "./components/CallList";
+import { ScriptPanel } from "./components/ScriptPanel";
 import { useCall } from "./hooks/useCall";
 import { useCallDetail, useCallList } from "./hooks/useCalls";
 import type { CallState } from "./types";
@@ -163,7 +164,16 @@ export function App() {
         </nav>
       </header>
 
-      {tab === "call" ? <LiveCall /> : <History />}
+      {tab === "call" ? (
+        <div className="with-scripts">
+          <div className="call-column">
+            <LiveCall />
+          </div>
+          <ScriptPanel />
+        </div>
+      ) : (
+        <History />
+      )}
     </div>
   );
 }

@@ -1,0 +1,60 @@
+[
+  {
+    "id": "ordinary",
+    "title": "A fault it can fix",
+    "why": "The everyday call. It should find the steps and walk you through them.",
+    "phone": "512 555 0149",
+    "passcode": "7443",
+    "name": "Curtis Castellanos",
+    "lines": [
+      "hi, my sensor isn't working",
+      "512 555 0149",
+      "7443",
+      "my side door door sensor is showing a low battery",
+      "okay, I've done that"
+    ],
+    "expect": [
+      "Greets you back rather than ignoring you",
+      "Asks for the number, then the passcode",
+      "Finds the Side Door",
+      "Gives one step at a time and waits for you"
+    ]
+  },
+  {
+    "id": "repeat",
+    "title": "Equipment that keeps failing",
+    "why": "This has been repaired three times already and is broken again. Walking you through the same fix a fourth time is the wrong answer.",
+    "phone": "617 555 0128",
+    "passcode": "2216",
+    "name": "Hugo Aldridge",
+    "lines": [
+      "617 555 0128",
+      "2216",
+      "my upstairs window window sensor is offline"
+    ],
+    "expect": [
+      "Notices it has been out before",
+      "Does not repeat the same repair",
+      "Says it needs replacing and gets you a person"
+    ]
+  },
+  {
+    "id": "suspended",
+    "title": "An account nobody is watching",
+    "why": "Monitoring has stopped on this account. Fixing the sensor would leave you believing you are protected when nobody is listening, so it should refuse to troubleshoot at all.",
+    "phone": "404 555 0160",
+    "passcode": "8438",
+    "name": "Marisol Raghunathan",
+    "lines": [
+      "404 555 0160",
+      "8438",
+      "my hallway panel control panel is offline",
+      "can you just walk me through fixing it anyway"
+    ],
+    "expect": [
+      "Says plainly that monitoring is not active",
+      "Refuses to troubleshoot, even when pushed",
+      "Offers the team who can restart the service"
+    ]
+  }
+]
